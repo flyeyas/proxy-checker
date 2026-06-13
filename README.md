@@ -3,15 +3,18 @@
 Proxy Checker 是一个通用免费代理检测工具，支持 HTTP、HTTPS、SOCKS4、SOCKS5、SOCKS5H。它可以批量检测代理可用性，识别出口 IP、国家和 IP 类型，并按常规访问或 AI 服务专项规则筛选结果。
 
 项目地址：[strongshuai/proxy-checker](https://github.com/strongshuai/proxy-checker)
-<img width="3828" height="1962" alt="ScreenShot_2026-06-14_045647_258" src="https://github.com/user-attachments/assets/d430db4c-7450-408a-b7ae-e44cf163a9ae" />
+<img width="3828" height="1962" alt="1781385018777_d" src="https://github.com/user-attachments/assets/0e640738-3bc3-436a-abf6-2c4cb6b85ee5" />
+
 
 ## 适合做什么
 
 - 从多个持续更新的免费代理源拉取代理。
 - 批量检测代理是否可用，并区分稳定、不稳定、失效。
-- 检查常规 HTTPS 连通性，或针对 OpenAI、Grok、Gemini、Claude 做专项可达性检测。
 - 保存可用代理到“我的仓库”，生成稳定 TXT 链接给其他程序拉取。
 - 对仓库代理再次检测、导入、导出、复制、按标签筛选。
+- 检查常规 HTTPS 连通性，或针对 OpenAI、Grok、Gemini、Claude 做专项可达性检测。
+<img width="2688" height="1560" alt="1781384983043_d" src="https://github.com/user-attachments/assets/861efcdc-6385-47c0-abe5-0d1fa7274655" />
+
 
 ## v5 主要能力
 
