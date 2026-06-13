@@ -3,6 +3,7 @@
 Proxy Checker 是一个通用免费代理检测工具，支持 HTTP、HTTPS、SOCKS4、SOCKS5、SOCKS5H。它可以批量检测代理可用性，识别出口 IP、国家和 IP 类型，并按常规访问或 AI 服务专项规则筛选结果。
 
 项目地址：[strongshuai/proxy-checker](https://github.com/strongshuai/proxy-checker)
+<img width="3828" height="1962" alt="ScreenShot_2026-06-14_045647_258" src="https://github.com/user-attachments/assets/d430db4c-7450-408a-b7ae-e44cf163a9ae" />
 
 ## 适合做什么
 
