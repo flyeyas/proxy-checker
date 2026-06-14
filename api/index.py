@@ -63,7 +63,19 @@ TIMEOUT = 10
 DETECT_TIMEOUT = 6
 MAX_CONCURRENT = get_config_int("max_concurrent", "MAX_CONCURRENT", 20)
 MAX_CONCURRENT_LIMIT = get_config_int("max_concurrent_limit", "MAX_CONCURRENT_LIMIT", 200)
-CHECK_ROUNDS = 2
+CHECK_ROUNDS = get_config_int("check_rounds", "CHECK_ROUNDS", 2)
+MAX_CHECK_ROUNDS = max(1, min(3, get_config_int("max_check_rounds", "MAX_CHECK_ROUNDS", 3)))
+CHECK_ROUNDS = max(1, min(MAX_CHECK_ROUNDS, CHECK_ROUNDS))
+RUN_LOG_LIMIT = get_config_int("run_log_limit", "RUN_LOG_LIMIT", 100)
+APP_TIMEZONE = str(get_config_value("timezone", "APP_TIMEZONE", "UTC"))
+TIMEZONE_OPTIONS = (
+    {"id": "UTC", "name": "UTC"},
+    {"id": "Asia/Shanghai", "name": "中国/新加坡/马来西亚 UTC+8"},
+    {"id": "Asia/Tokyo", "name": "日本/韩国 UTC+9"},
+    {"id": "Europe/London", "name": "伦敦"},
+    {"id": "America/New_York", "name": "美国东部"},
+    {"id": "America/Los_Angeles", "name": "美国西部"},
+)
 AUTH_PASSWORD = str(get_config_value("auth_password", "AUTH_PASSWORD", "linux.do"))
 AUTH_SESSION_DAYS = get_config_int("auth_session_days", "AUTH_SESSION_DAYS", 7)
 AUTH_COOKIE_NAME = "proxy_checker_auth"
@@ -93,6 +105,28 @@ def normalize_max_concurrent(value):
     except (TypeError, ValueError):
         concurrent = MAX_CONCURRENT
     return max(1, min(MAX_CONCURRENT_LIMIT, concurrent))
+
+def normalize_rounds(value):
+    try:
+        rounds = int(value)
+    except (TypeError, ValueError):
+        rounds = CHECK_ROUNDS
+    return max(1, min(MAX_CHECK_ROUNDS, rounds))
+
+def public_settings_payload():
+    return {
+        "check_rounds": CHECK_ROUNDS,
+        "max_check_rounds": MAX_CHECK_ROUNDS,
+        "max_concurrent": MAX_CONCURRENT,
+        "max_concurrent_limit": MAX_CONCURRENT_LIMIT,
+        "timeout": TIMEOUT,
+        "detect_timeout": DETECT_TIMEOUT,
+        "auth_session_days": AUTH_SESSION_DAYS,
+        "run_log_limit": RUN_LOG_LIMIT,
+        "timezone": APP_TIMEZONE,
+        "timezone_options": list(TIMEZONE_OPTIONS),
+        "password_configurable": False,
+    }
 
 def is_auth_enabled():
     return bool(AUTH_PASSWORD)
@@ -223,7 +257,7 @@ def api_start():
         return unauthorized_response()
     data = request.get_json(force=True) or {}
     proxies = data.get("proxies", [])
-    rounds = max(1, min(5, int(data.get("rounds", CHECK_ROUNDS))))
+    rounds = normalize_rounds(data.get("rounds", CHECK_ROUNDS))
     target_profile = normalize_target_profile(data.get("target_profile", "generic"))
     max_concurrent = normalize_max_concurrent(data.get("max_concurrent", MAX_CONCURRENT))
     sid = str(time.time()) + str(id(proxies))
@@ -266,9 +300,33 @@ def api_capabilities():
     try:
         from fetch_proxies import PROXY_SOURCES
         sources = [{"id": s["id"], "name": s["name"]} for s in PROXY_SOURCES]
-        return jsonify({"nodriver": False, "xvfb": False, "deep_check": False, "fetch_proxies": True, "target_profiles": list(TARGET_PROFILE_OPTIONS), "max_concurrent": MAX_CONCURRENT, "max_concurrent_limit": MAX_CONCURRENT_LIMIT, "auth_required": is_auth_enabled(), "authenticated": is_request_authenticated(), "auto_mode": False, "auto_mode_hint": "Vercel / Serverless 不支持后台自动模式，请使用自托管 Python 服务", "proxy_sources": sources, "hosted": "vercel"})
+        return jsonify({"nodriver": False, "xvfb": False, "deep_check": False, "fetch_proxies": True, "target_profiles": list(TARGET_PROFILE_OPTIONS), "max_concurrent": MAX_CONCURRENT, "max_concurrent_limit": MAX_CONCURRENT_LIMIT, "auth_required": is_auth_enabled(), "authenticated": is_request_authenticated(), "auto_mode": False, "auto_mode_hint": "Vercel / Serverless 不支持后台自动模式，请使用自托管 Python 服务", "settings": public_settings_payload(), "proxy_sources": sources, "hosted": "vercel"})
     except ImportError:
-        return jsonify({"nodriver": False, "xvfb": False, "deep_check": False, "fetch_proxies": False, "target_profiles": list(TARGET_PROFILE_OPTIONS), "max_concurrent": MAX_CONCURRENT, "max_concurrent_limit": MAX_CONCURRENT_LIMIT, "auth_required": is_auth_enabled(), "authenticated": is_request_authenticated(), "auto_mode": False, "auto_mode_hint": "Vercel / Serverless 不支持后台自动模式，请使用自托管 Python 服务", "proxy_sources": [], "hosted": "vercel"})
+        return jsonify({"nodriver": False, "xvfb": False, "deep_check": False, "fetch_proxies": False, "target_profiles": list(TARGET_PROFILE_OPTIONS), "max_concurrent": MAX_CONCURRENT, "max_concurrent_limit": MAX_CONCURRENT_LIMIT, "auth_required": is_auth_enabled(), "authenticated": is_request_authenticated(), "auto_mode": False, "auto_mode_hint": "Vercel / Serverless 不支持后台自动模式，请使用自托管 Python 服务", "settings": public_settings_payload(), "proxy_sources": [], "hosted": "vercel"})
+
+@app.route('/api/settings/get', methods=['POST'])
+def api_settings_get():
+    if not is_request_authenticated():
+        return unauthorized_response()
+    return jsonify({"settings": public_settings_payload(), "server_time": {"timestamp": int(time.time()), "text": time.strftime("%Y-%m-%d %H:%M:%S"), "timezone": APP_TIMEZONE}})
+
+@app.route('/api/settings/save', methods=['POST'])
+def api_settings_save():
+    if not is_request_authenticated():
+        return unauthorized_response()
+    return jsonify({"error": "Vercel / Serverless 不支持保存运行设置，请使用自托管 Python 服务", "settings": public_settings_payload()})
+
+@app.route('/api/logs/list', methods=['POST'])
+def api_logs_list():
+    if not is_request_authenticated():
+        return unauthorized_response()
+    return jsonify({"logs": [], "count": 0, "server_time": {"timestamp": int(time.time()), "text": time.strftime("%Y-%m-%d %H:%M:%S"), "timezone": APP_TIMEZONE}})
+
+@app.route('/api/logs/clear', methods=['POST'])
+def api_logs_clear():
+    if not is_request_authenticated():
+        return unauthorized_response()
+    return jsonify({"ok": True, "logs": [], "count": 0})
 
 @app.route('/api/auto/get', methods=['POST'])
 @app.route('/api/auto/save', methods=['POST'])

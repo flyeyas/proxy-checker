@@ -27,6 +27,19 @@ var authenticated=false;
 var autoModeAvailable=false;
 var autoStatusTimer=null;
 var autoStatusCache=null;
+var appSettings={
+  check_rounds:2,
+  max_check_rounds:3,
+  max_concurrent:30,
+  max_concurrent_limit:200,
+  timeout:12,
+  detect_timeout:8,
+  auth_session_days:7,
+  run_log_limit:100,
+  timezone:'UTC',
+  timezone_options:[{id:'UTC',name:'UTC'}],
+  password_configurable:true
+};
 var targetProfiles=[
   {id:'generic',name:'常规代理检测',has_api:false,has_signup:false,has_cf_detection:false},
   {id:'openai',name:'OpenAI 检测',has_api:true,has_signup:false,has_cf_detection:true},
@@ -213,6 +226,7 @@ function checkCapabilities(){
       updateTargetProfileUI();
     }
     autoModeAvailable=!!(res&&res.auto_mode);
+    if(res&&res.settings)applyAppSettings(res.settings);
     updateAutoAvailability(res&&res.auto_mode_hint);
     if(autoModeAvailable&&authenticated)loadAutoStatus();
     var badge=document.getElementById("capBadge");
@@ -316,12 +330,49 @@ var roundsSelect=document.getElementById("roundsSelect");
 var concurrentInput=document.getElementById("concurrentInput");
 var sRounds=document.getElementById("sRounds");
 var CONCURRENT_KEY='proxy_checker_max_concurrent';
+var ROUNDS_KEY='proxy_checker_rounds';
 
 function normalizeConcurrent(value){
   var n=parseInt(value);
-  if(!n||n<1)n=30;
-  if(n>200)n=200;
+  if(!n||n<1)n=appSettings.max_concurrent||30;
+  var limit=appSettings.max_concurrent_limit||200;
+  if(n>limit)n=limit;
   return n;
+}
+
+function normalizeRounds(value){
+  var n=parseInt(value);
+  if(!n||n<1)n=appSettings.check_rounds||2;
+  var max=appSettings.max_check_rounds||3;
+  if(n>max)n=max;
+  return n;
+}
+
+function renderRoundsSelect(maxRounds,selected){
+  if(!roundsSelect)return;
+  maxRounds=normalizeRounds(maxRounds||3);
+  selected=normalizeRounds(selected||appSettings.check_rounds||2);
+  var labels={1:'1轮(快速)',2:'2轮(推荐)',3:'3轮(严格)'};
+  var html='';
+  for(var i=1;i<=maxRounds;i++){
+    html+='<option value="'+i+'" '+(i===selected?'selected':'')+'>'+(labels[i]||i+'轮')+'</option>';
+  }
+  roundsSelect.innerHTML=html;
+  roundsSelect.value=String(selected);
+}
+
+function applyAppSettings(settings){
+  if(!settings)return;
+  appSettings=Object.assign({},appSettings,settings);
+  var savedRounds=localStorage.getItem(ROUNDS_KEY);
+  var rounds=normalizeRounds(savedRounds||appSettings.check_rounds);
+  renderRoundsSelect(appSettings.max_check_rounds,rounds);
+  if(concurrentInput){
+    var savedConcurrent=localStorage.getItem(CONCURRENT_KEY);
+    concurrentInput.max=String(appSettings.max_concurrent_limit||200);
+    concurrentInput.value=String(normalizeConcurrent(savedConcurrent||appSettings.max_concurrent));
+  }
+  updateStatLabels();
 }
 
 function getConcurrentValue(){
@@ -331,15 +382,23 @@ function getConcurrentValue(){
   return n;
 }
 
+function getRoundsValue(){
+  var n=normalizeRounds(roundsSelect?roundsSelect.value:appSettings.check_rounds);
+  if(roundsSelect)roundsSelect.value=String(n);
+  localStorage.setItem(ROUNDS_KEY,String(n));
+  return n;
+}
+
 if(concurrentInput){
   concurrentInput.value=String(normalizeConcurrent(localStorage.getItem(CONCURRENT_KEY)||concurrentInput.value));
   concurrentInput.addEventListener('change',getConcurrentValue);
   concurrentInput.addEventListener('blur',getConcurrentValue);
 }
+renderRoundsSelect(appSettings.max_check_rounds,localStorage.getItem(ROUNDS_KEY)||appSettings.check_rounds);
 
 function updateStatLabels(){
   if(!roundsSelect)return;
-  var r=parseInt(roundsSelect.value)||2;
+  var r=getRoundsValue();
   sRounds.textContent=r+"轮";
   document.querySelector('#sValid').closest('.stat').querySelector('.stat-label').textContent='稳定('+r+'/'+r+')';
   document.querySelector('#sUnstable').closest('.stat').querySelector('.stat-label').textContent='不稳定('+(r-1>0?r-1:1)+'/'+r+')';
@@ -370,7 +429,7 @@ function startCheck(options){
   }
   var lines=parseLines(proxyInput.value);
   if(!lines.length){toast("请输入至少一个代理");return}
-  var rounds=parseInt(roundsSelect.value)||2;
+  var rounds=getRoundsValue();
   var maxConcurrent=getConcurrentValue();
   sRounds.textContent=rounds+"轮";
   updateStatLabels();
@@ -423,7 +482,7 @@ function saveActiveSession(){
   localStorage.setItem(ACTIVE_SESSION_KEY,JSON.stringify({
     session_id:sid,
     target_profile:currentTargetProfile,
-    rounds:parseInt(roundsSelect.value)||2,
+    rounds:getRoundsValue(),
     max_concurrent:getConcurrentValue(),
     total:totalCount,
     input:proxyInput.value,
@@ -940,12 +999,30 @@ function updateAutoAvailability(hint){
   }
 }
 
-function formatAutoTime(ts){
+function formatAutoTime(ts,timezone){
   if(!ts)return '-';
   var d=new Date(Number(ts)*1000);
   if(isNaN(d.getTime()))return '-';
-  var pad=function(n){return n<10?'0'+n:String(n)};
-  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+  var tz=timezone||appSettings.timezone||'UTC';
+  try{
+    return new Intl.DateTimeFormat('zh-CN',{
+      timeZone:tz,
+      year:'numeric',
+      month:'2-digit',
+      day:'2-digit',
+      hour:'2-digit',
+      minute:'2-digit',
+      second:'2-digit',
+      hour12:false
+    }).format(d).replace(/\//g,'-');
+  }catch(e){
+    var pad=function(n){return n<10?'0'+n:String(n)};
+    return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())+' '+pad(d.getUTCHours())+':'+pad(d.getUTCMinutes());
+  }
+}
+
+function getAutoTimezone(data){
+  return (data&&data.config&&data.config.timezone)||appSettings.timezone||'UTC';
 }
 
 function autoStatusText(data){
@@ -957,7 +1034,7 @@ function autoStatusText(data){
   if(state.status==='failed')return '自动上次失败';
   if(state.status==='interrupted')return '自动曾中断';
   if(state.status==='stopped')return '自动已停止';
-  return '等待下次 '+formatAutoTime(state.next_run_at);
+  return '等待下次 '+formatAutoTime(state.next_run_at,getAutoTimezone(data));
 }
 
 function renderAutoStatus(data){
@@ -972,7 +1049,7 @@ function renderAutoStatus(data){
     if(state.running)badge.classList.add('running');
     else if(config.enabled&&state.status!=='failed'&&state.status!=='interrupted')badge.classList.add('waiting');
     else if(state.status==='failed'||state.status==='interrupted')badge.classList.add('error');
-    badge.title='服务器时间: '+((data.server_time&&data.server_time.text)||'-');
+    badge.title='计划时区: '+getAutoTimezone(data)+'，当前时间: '+((data.server_time&&data.server_time.text)||'-');
   }
   var stopBtn=document.getElementById('autoStopBtn');
   if(stopBtn)stopBtn.disabled=!(data.state&&data.state.running);
@@ -1006,11 +1083,20 @@ function autoProfileOptions(selected){
   }).join('');
 }
 
+function timezoneOptions(selected){
+  var options=appSettings.timezone_options||[{id:'UTC',name:'UTC'}];
+  selected=selected||appSettings.timezone||'UTC';
+  return options.map(function(item){
+    return '<option value="'+esc(item.id)+'" '+(item.id===selected?'selected':'')+'>'+esc(item.name||item.id)+' · '+esc(item.id)+'</option>';
+  }).join('');
+}
+
 function renderAutoProgress(data){
   var box=document.getElementById('autoProgress');
   if(!box||!data)return;
   var state=data.state||{};
   var config=data.config||{};
+  var tz=getAutoTimezone(data);
   var stageMap={
     starting:'准备启动',
     fetching:'拉取免费代理',
@@ -1028,8 +1114,10 @@ function renderAutoProgress(data){
   var html='';
   html+='<div>状态: '+esc(autoStatusText(data))+'</div>';
   html+='<div>阶段: '+esc(stageMap[state.stage]||state.stage||'-')+'</div>';
-  html+='<div>服务器时间: '+esc((data.server_time&&data.server_time.text)||'-')+'</div>';
-  if(config.enabled)html+='<div>下次执行: '+esc(formatAutoTime(state.next_run_at))+'</div>';
+  html+='<div>计划时区: '+esc(tz)+'</div>';
+  html+='<div>当前时间: '+esc((data.server_time&&data.server_time.text)||formatAutoTime((data.server_time&&data.server_time.timestamp),tz))+'</div>';
+  if(data.server_time&&data.server_time.server_text&&data.server_time.server_text!==data.server_time.text)html+='<div>服务器本地: '+esc(data.server_time.server_text)+' '+esc(data.server_time.server_timezone||'')+'</div>';
+  if(config.enabled)html+='<div>下次执行: '+esc(state.next_run_text||formatAutoTime(state.next_run_at,tz))+'</div>';
   if(state.running){
     html+='<div>进度: '+(state.done||0)+'/'+(state.total||0)+'，有效 '+(state.valid_count||0)+'，不稳定 '+(state.unstable_count||0)+'，失效 '+(state.invalid_count||0)+'</div>';
     html+='<div>来源 '+(state.source_count||0)+'，仓库 '+(state.repo_count||0)+'，跳过 '+(state.skipped||0)+'</div>';
@@ -1042,7 +1130,7 @@ function renderAutoProgress(data){
   if(Array.isArray(state.history)&&state.history.length){
     html+='<div class="auto-history">';
     state.history.slice(-5).reverse().forEach(function(item){
-      html+='<div>'+esc(formatAutoTime(item.finished_at))+' · '+esc(item.status||'-')+' · '+(item.done||0)+'/'+(item.total||0)+' · 有效 '+(item.valid_count||0)+'</div>';
+      html+='<div>'+esc(formatAutoTime(item.finished_at,item.timezone||tz))+' · '+esc(item.status||'-')+' · '+(item.done||0)+'/'+(item.total||0)+' · 有效 '+(item.valid_count||0)+'</div>';
     });
     html+='</div>';
   }
@@ -1072,19 +1160,20 @@ function showAutoModal(data){
   overlay.className='modal-overlay show';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
   var html='<div class="modal-box" style="max-width:640px;text-align:left">';
-  html+='<div class="modal-icon" style="background:linear-gradient(135deg,rgba(34,197,94,.15),rgba(34,197,94,.05));border-color:rgba(34,197,94,.22)">&#9201;</div>';
+  html+='<div class="modal-icon" style="background:linear-gradient(135deg,rgba(34,197,94,.15),rgba(34,197,94,.05));border-color:rgba(34,197,94,.22)">⏱️</div>';
   html+='<h3 style="text-align:center">自动模式</h3>';
   html+='<div class="auto-progress" id="autoProgress"></div>';
+  html+='<div class="settings-note">启用后台自动检测：保存后服务器会按时间规则自动跑，不需要浏览器一直打开。立即运行：不等下次计划时间，马上跑一轮；是否启用定时由上面的勾选决定。</div>';
   html+='<div class="auto-form">';
   html+='<div class="auto-field full"><label><input id="autoEnabled" type="checkbox" '+(config.enabled?'checked':'')+' style="width:auto;height:auto;margin-right:8px">启用后台自动检测</label></div>';
   html+='<div class="auto-field"><label>时间规则</label><select id="autoScheduleType" onchange="updateAutoScheduleFields()"><option value="interval" '+(config.schedule_type==='interval'?'selected':'')+'>每隔 N 小时</option><option value="daily" '+(config.schedule_type==='daily'?'selected':'')+'>每天固定时间</option></select></div>';
   html+='<div class="auto-field" id="autoIntervalField"><label>间隔小时</label><input id="autoIntervalHours" type="number" min="0.01" max="720" step="0.25" value="'+esc(config.interval_hours||6)+'"></div>';
-  html+='<div class="auto-field" id="autoDailyField"><label>固定时间（服务器）</label><input id="autoDailyTime" type="time" value="'+esc(config.daily_time||'03:00')+'"></div>';
+  html+='<div class="auto-field" id="autoDailyField"><label>固定时间（计划时区）</label><input id="autoDailyTime" type="time" value="'+esc(config.daily_time||'03:00')+'"></div>';
+  html+='<div class="auto-field"><label>计划时区</label><select id="autoTimezone">'+timezoneOptions(config.timezone||appSettings.timezone)+'</select></div>';
   html+='<div class="auto-field"><label>检测模式</label><select id="autoTargetProfile">'+autoProfileOptions(config.target_profile||currentTargetProfile)+'</select></div>';
-  html+='<div class="auto-field"><label>检测轮次</label><select id="autoRounds"><option value="1">1轮</option><option value="2">2轮</option><option value="3">3轮</option><option value="4">4轮</option><option value="5">5轮</option></select></div>';
-  html+='<div class="auto-field"><label>并发数量</label><input id="autoConcurrent" type="number" min="1" max="200" step="1" value="'+esc(config.max_concurrent||getConcurrentValue())+'"></div>';
   html+='<div class="auto-field"><label>检测范围</label><select id="autoDetectMode"><option value="skip">只检测新代理</option><option value="force">强制检测全部</option></select></div>';
   html+='<div class="auto-field full"><label>入库策略</label><select id="autoRepoPolicy"><option value="stable_only">只入库稳定可用(A/B/C)，复测失败旧代理会删除</option><option value="include_unstable">包含不稳定(A/B/C/D)，复测失败旧代理会删除</option><option value="archive_all">所有结果都留档，失效代理也保留</option></select></div>';
+  html+='<div class="auto-field full"><div class="settings-note">本轮自动检测使用全局设置：'+esc(getRoundsValue())+' 轮，并发 '+esc(getConcurrentValue())+'。要修改请打开“设置”。</div></div>';
   html+='</div>';
   html+='<div class="auto-inline" style="justify-content:center;margin-top:12px">';
   html+='<button class="btn btn-primary" onclick="saveAutoSettings()">保存设置</button>';
@@ -1094,7 +1183,6 @@ function showAutoModal(data){
   html+='</div></div>';
   overlay.innerHTML=html;
   document.body.appendChild(overlay);
-  document.getElementById('autoRounds').value=String(config.rounds||2);
   document.getElementById('autoDetectMode').value=config.detect_mode||'skip';
   document.getElementById('autoRepoPolicy').value=config.repo_update_policy||'stable_only';
   updateAutoScheduleFields();
@@ -1116,9 +1204,10 @@ function readAutoConfigFromModal(){
     schedule_type:document.getElementById('autoScheduleType').value,
     interval_hours:parseFloat(document.getElementById('autoIntervalHours').value)||6,
     daily_time:document.getElementById('autoDailyTime').value||'03:00',
+    timezone:document.getElementById('autoTimezone').value||appSettings.timezone||'UTC',
     target_profile:document.getElementById('autoTargetProfile').value,
-    rounds:parseInt(document.getElementById('autoRounds').value)||2,
-    max_concurrent:parseInt(document.getElementById('autoConcurrent').value)||getConcurrentValue(),
+    rounds:getRoundsValue(),
+    max_concurrent:getConcurrentValue(),
     detect_mode:document.getElementById('autoDetectMode').value,
     repo_update_policy:document.getElementById('autoRepoPolicy').value
   };
@@ -1150,6 +1239,164 @@ function stopAutoNow(){
     if(err){toast(err);return}
     renderAutoStatus(res);
     toast(res.stopped?'已请求停止自动任务':'当前没有自动任务');
+  });
+}
+
+// ============================================================
+// Global settings and run logs
+// ============================================================
+function openAppSettings(){
+  if(!requireAuthenticatedUI())return;
+  post('/api/settings/get',{},function(err,res){
+    if(err||res.error){toast(err||res.error||'读取设置失败');return}
+    if(res.settings)applyAppSettings(res.settings);
+    showSettingsModal(res.settings||appSettings);
+  });
+}
+
+function settingsRoundsOptions(selected){
+  var max=appSettings.max_check_rounds||3;
+  selected=normalizeRounds(selected||appSettings.check_rounds||2);
+  var html='';
+  for(var i=1;i<=max;i++){
+    html+='<option value="'+i+'" '+(i===selected?'selected':'')+'>'+i+'轮'+(i===2?'（推荐）':'')+'</option>';
+  }
+  return html;
+}
+
+function showSettingsModal(settings){
+  settings=Object.assign({},appSettings,settings||{});
+  var overlay=document.createElement('div');
+  overlay.className='modal-overlay show';
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
+  var html='<div class="modal-box" style="max-width:720px;text-align:left">';
+  html+='<div class="modal-icon" style="background:linear-gradient(135deg,rgba(124,92,252,.16),rgba(124,92,252,.05));border-color:rgba(124,92,252,.22)">⚙️</div>';
+  html+='<h3 style="text-align:center">设置</h3>';
+  html+='<div class="settings-note">这里保存的是服务运行参数。轮次默认最多 3 轮，轮次越高越慢；并发越高越快，但服务器和代理源压力也越大。</div>';
+  html+='<div class="auto-form">';
+  html+='<div class="auto-field"><label>检测轮次</label><select id="settingsRounds">'+settingsRoundsOptions(settings.check_rounds)+'</select></div>';
+  html+='<div class="auto-field"><label>默认并发</label><input id="settingsConcurrent" type="number" min="1" max="'+esc(settings.max_concurrent_limit||200)+'" step="1" value="'+esc(settings.max_concurrent||30)+'"></div>';
+  html+='<div class="auto-field"><label>并发上限</label><input id="settingsConcurrentLimit" type="number" min="1" max="1000" step="1" value="'+esc(settings.max_concurrent_limit||200)+'"></div>';
+  html+='<div class="auto-field"><label>请求超时（秒）</label><input id="settingsTimeout" type="number" min="3" max="120" step="1" value="'+esc(settings.timeout||12)+'"></div>';
+  html+='<div class="auto-field"><label>协议识别超时（秒）</label><input id="settingsDetectTimeout" type="number" min="3" max="120" step="1" value="'+esc(settings.detect_timeout||8)+'"></div>';
+  html+='<div class="auto-field"><label>登录有效天数</label><input id="settingsSessionDays" type="number" min="1" max="365" step="1" value="'+esc(settings.auth_session_days||7)+'"></div>';
+  html+='<div class="auto-field"><label>日志保留条数</label><input id="settingsLogLimit" type="number" min="20" max="1000" step="10" value="'+esc(settings.run_log_limit||100)+'"></div>';
+  html+='<div class="auto-field full"><label>默认时区</label><select id="settingsTimezone">'+timezoneOptions(settings.timezone||appSettings.timezone)+'</select></div>';
+  html+='<div class="auto-field full"><label>新登录密码</label><input id="settingsPassword" type="password" autocomplete="new-password" placeholder="'+(settings.password_configurable?'留空表示不修改':'当前由环境变量控制，页面不能永久修改')+'" '+(settings.password_configurable?'':'disabled')+'></div>';
+  html+='<div class="auto-field full"><label>确认新密码</label><input id="settingsPasswordConfirm" type="password" autocomplete="new-password" placeholder="再次输入新密码" '+(settings.password_configurable?'':'disabled')+'></div>';
+  html+='</div>';
+  html+='<div class="auto-inline" style="justify-content:center;margin-top:12px">';
+  html+='<button class="btn btn-primary" onclick="saveAppSettings()">保存设置</button>';
+  html+='<button class="btn btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">关闭</button>';
+  html+='</div></div>';
+  overlay.innerHTML=html;
+  document.body.appendChild(overlay);
+}
+
+function readSettingsFromModal(){
+  var password=document.getElementById('settingsPassword').value;
+  var confirm=document.getElementById('settingsPasswordConfirm').value;
+  if(password||confirm){
+    if(password!==confirm){
+      toast('两次输入的新密码不一致');
+      return null;
+    }
+    if(password.length<4){
+      toast('新密码至少 4 位');
+      return null;
+    }
+  }
+  return {
+    check_rounds:parseInt(document.getElementById('settingsRounds').value)||2,
+    max_check_rounds:3,
+    max_concurrent:parseInt(document.getElementById('settingsConcurrent').value)||30,
+    max_concurrent_limit:parseInt(document.getElementById('settingsConcurrentLimit').value)||200,
+    timeout:parseInt(document.getElementById('settingsTimeout').value)||12,
+    detect_timeout:parseInt(document.getElementById('settingsDetectTimeout').value)||8,
+    auth_session_days:parseInt(document.getElementById('settingsSessionDays').value)||7,
+    run_log_limit:parseInt(document.getElementById('settingsLogLimit').value)||100,
+    timezone:document.getElementById('settingsTimezone').value||'UTC',
+    auth_password:password||''
+  };
+}
+
+function saveAppSettings(){
+  var settings=readSettingsFromModal();
+  if(!settings)return;
+  post('/api/settings/save',{settings:settings},function(err,res){
+    if(err||res.error){toast(err||res.error||'保存设置失败');return}
+    if(res.token)localStorage.setItem(AUTH_TOKEN_KEY,res.token);
+    applyAppSettings(res.settings||settings);
+    if(autoStatusCache)renderAutoStatus(autoStatusCache);
+    toast(res.password_changed?'设置已保存，登录密码已更新':'设置已保存');
+  });
+}
+
+function openRunLogs(){
+  if(!requireAuthenticatedUI())return;
+  post('/api/logs/list',{token:getUserToken()},function(err,res){
+    if(err||res.error){toast(err||res.error||'读取检测日志失败');return}
+    showRunLogsModal(res.logs||[]);
+  });
+}
+
+function logStatusLabel(status){
+  var map={running:'运行中',completed:'已完成',stopped:'已停止',failed:'失败',interrupted:'已中断'};
+  return map[status]||status||'-';
+}
+
+function showRunLogsModal(logs){
+  var overlay=document.createElement('div');
+  overlay.className='modal-overlay show';
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
+  var html='<div class="modal-box" style="max-width:820px;text-align:left">';
+  html+='<div class="modal-icon" style="background:linear-gradient(135deg,rgba(96,165,250,.16),rgba(96,165,250,.05));border-color:rgba(96,165,250,.22)">📋</div>';
+  html+='<h3 style="text-align:center">检测日志</h3>';
+  html+='<div class="settings-note">记录手动检测和自动任务的开始时间、结束时间、模式、轮次、并发、数量和结果摘要。</div>';
+  html+='<div class="log-list" id="runLogList">';
+  if(!logs.length){
+    html+='<div class="empty">还没有检测日志</div>';
+  }else{
+    logs.forEach(function(item){
+      var title=(item.type==='auto'?'⏱️ 自动任务':'▶ 手动检测')+' · '+logStatusLabel(item.status);
+      html+='<div class="log-item">';
+      html+='<div class="log-title"><span>'+esc(title)+'</span><span>'+esc(item.started_text||formatAutoTime(item.started_at,item.timezone||appSettings.timezone))+'</span></div>';
+      html+='<div>结束: '+esc(item.finished_text||formatAutoTime(item.finished_at,item.timezone||appSettings.timezone))+' · 耗时: '+esc(item.duration_seconds!==undefined?item.duration_seconds+'秒':'-')+'</div>';
+      html+='<div class="log-meta">';
+      html+='<span class="log-pill">'+esc(item.target_name||item.target_profile||'常规代理检测')+'</span>';
+      html+='<span class="log-pill">'+esc(item.rounds||'-')+'轮</span>';
+      html+='<span class="log-pill">并发 '+esc(item.max_concurrent||'-')+'</span>';
+      if(item.schedule_type)html+='<span class="log-pill">'+esc(item.schedule_type==='daily'?'每天固定':'间隔执行')+'</span>';
+      if(item.timezone)html+='<span class="log-pill">'+esc(item.timezone)+'</span>';
+      html+='<span class="log-pill">检测 '+esc(item.done||0)+'/'+esc(item.total||0)+'</span>';
+      html+='<span class="log-pill">有效 '+esc(item.valid_count||0)+'</span>';
+      html+='<span class="log-pill">不稳定 '+esc(item.unstable_count||0)+'</span>';
+      html+='<span class="log-pill">失效 '+esc(item.invalid_count||0)+'</span>';
+      if(item.repo_added!==undefined)html+='<span class="log-pill">入库 +'+esc(item.repo_added||0)+'</span>';
+      if(item.repo_removed!==undefined)html+='<span class="log-pill">删除 '+esc(item.repo_removed||0)+'</span>';
+      html+='</div>';
+      if(item.error)html+='<div style="color:#ef4444;margin-top:4px">错误: '+esc(item.error)+'</div>';
+      html+='</div>';
+    });
+  }
+  html+='</div>';
+  html+='<div class="auto-inline" style="justify-content:center;margin-top:12px">';
+  html+='<button class="btn btn-danger" onclick="clearRunLogs()">清空日志</button>';
+  html+='<button class="btn btn-ghost" onclick="openRunLogs();this.closest(\'.modal-overlay\').remove()">刷新</button>';
+  html+='<button class="btn btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">关闭</button>';
+  html+='</div></div>';
+  overlay.innerHTML=html;
+  document.body.appendChild(overlay);
+}
+
+function clearRunLogs(){
+  if(!confirm('确定清空检测日志？'))return;
+  post('/api/logs/clear',{token:getUserToken()},function(err,res){
+    if(err||res.error){toast(err||res.error||'清空失败');return}
+    var modal=document.querySelector('.modal-overlay.show');
+    if(modal)modal.remove();
+    showRunLogsModal(res.logs||[]);
+    toast('检测日志已清空');
   });
 }
 
@@ -1324,7 +1571,7 @@ function restoreActiveSession(){
     proxyInput.value=active.input;
     updateProxyCount();
   }
-  if(active.rounds)roundsSelect.value=String(active.rounds);
+  if(active.rounds)roundsSelect.value=String(normalizeRounds(active.rounds));
   if(active.max_concurrent&&concurrentInput){
     concurrentInput.value=String(normalizeConcurrent(active.max_concurrent));
     localStorage.setItem(CONCURRENT_KEY,concurrentInput.value);
