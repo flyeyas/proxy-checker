@@ -16,7 +16,7 @@ var sUnstable=document.getElementById("sUnstable");
 var sInvalid=document.getElementById("sInvalid");
 var sRate=document.getElementById("sRate");
 var sCfBypass=document.getElementById("sCfBypass");
-var sRegReady=document.getElementById("sRegReady");
+var sApiReachable=document.getElementById("sApiReachable");
 var statusText=document.getElementById("statusText");
 var proxyCountBadge=document.getElementById("proxyCountBadge");
 var TARGET_PROFILE_KEY='proxy_checker_target_profile';
@@ -24,12 +24,15 @@ var ACTIVE_SESSION_KEY='proxy_checker_active_session';
 var AUTH_TOKEN_KEY='proxy_checker_auth_token';
 var authRequired=false;
 var authenticated=false;
+var autoModeAvailable=false;
+var autoStatusTimer=null;
+var autoStatusCache=null;
 var targetProfiles=[
-  {id:'generic',name:'常规代理检测',has_api:false,has_signup:false},
-  {id:'openai',name:'OpenAI 检测',has_api:true,has_signup:true},
-  {id:'grok',name:'Grok 检测',has_api:true,has_signup:false},
-  {id:'gemini',name:'Gemini 检测',has_api:true,has_signup:false},
-  {id:'claude',name:'Claude 检测',has_api:true,has_signup:false}
+  {id:'generic',name:'常规代理检测',has_api:false,has_signup:false,has_cf_detection:false},
+  {id:'openai',name:'OpenAI 检测',has_api:true,has_signup:false,has_cf_detection:true},
+  {id:'grok',name:'Grok 检测',has_api:true,has_signup:false,has_cf_detection:true},
+  {id:'gemini',name:'Gemini 检测',has_api:true,has_signup:false,has_cf_detection:false},
+  {id:'claude',name:'Claude 检测',has_api:true,has_signup:false,has_cf_detection:true}
 ];
 var currentTargetProfile=localStorage.getItem(TARGET_PROFILE_KEY)||'generic';
 
@@ -84,6 +87,7 @@ function copyText(text){
 }
 function toast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2500)}
 function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function attr(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function parseLines(t){return t.split("\n").map(function(l){return l.trim()}).filter(function(l){return l.length>0 && !l.startsWith("#")})}
 function dedup(){
   var lines=parseLines(proxyInput.value);
@@ -208,6 +212,9 @@ function checkCapabilities(){
       renderTargetProfileMenu();
       updateTargetProfileUI();
     }
+    autoModeAvailable=!!(res&&res.auto_mode);
+    updateAutoAvailability(res&&res.auto_mode_hint);
+    if(autoModeAvailable&&authenticated)loadAutoStatus();
     var badge=document.getElementById("capBadge");
     if(res && res.deep_check){
       badge.className="cap-badge cap-ok";
@@ -246,8 +253,8 @@ function updateTargetProfileUI(){
   if(btn)btn.innerHTML='&#127919; '+esc(profile.name)+' &#9660;';
   var serviceBtn=document.getElementById('filterServiceBtn');
   var apiBtn=document.getElementById('filterApiBtn');
-  if(serviceBtn)serviceBtn.textContent=currentTargetProfile==='openai'?'CF绕过':'服务可达';
-  if(apiBtn)apiBtn.textContent=currentTargetProfile==='openai'?'可注册':(profile.has_api?'API可达':'出口IP');
+  if(serviceBtn)serviceBtn.textContent=profile.has_cf_detection?'CF绕过':'服务可达';
+  if(apiBtn)apiBtn.textContent=profile.has_api?'API域名可达':'出口IP';
   updateStatLabels();
 }
 
@@ -337,8 +344,8 @@ function updateStatLabels(){
   document.querySelector('#sValid').closest('.stat').querySelector('.stat-label').textContent='稳定('+r+'/'+r+')';
   document.querySelector('#sUnstable').closest('.stat').querySelector('.stat-label').textContent='不稳定('+(r-1>0?r-1:1)+'/'+r+')';
   var profile=getTargetProfileInfo(currentTargetProfile);
-  document.querySelector('#sCfBypass').closest('.stat').querySelector('.stat-label').textContent=currentTargetProfile==='openai'?'CF绕过':'服务可达';
-  document.querySelector('#sRegReady').closest('.stat').querySelector('.stat-label').textContent=currentTargetProfile==='openai'?'可注册':(profile.has_api?'API可达':'出口IP');
+  document.querySelector('#sCfBypass').closest('.stat').querySelector('.stat-label').textContent=profile.has_cf_detection?'CF绕过':'服务可达';
+  document.querySelector('#sApiReachable').closest('.stat').querySelector('.stat-label').textContent=profile.has_api?'API域名':'出口IP';
 }
 roundsSelect.addEventListener('change',updateStatLabels);
 updateStatLabels();
@@ -349,6 +356,18 @@ function startCheck(options){
   options=options||{};
   if(!requireAuthenticatedUI())return;
   if(busy) return;
+  if(!options.skipAutoCheck&&autoModeAvailable){
+    post('/api/auto/status',{token:getUserToken()},function(err,res){
+      if(!err&&res&&res.state&&res.state.running){
+        renderAutoStatus(res);
+        toast('自动任务正在执行，请先打开自动模式并停止自动任务');
+        return;
+      }
+      var nextOptions=Object.assign({},options,{skipAutoCheck:true});
+      startCheck(nextOptions);
+    });
+    return;
+  }
   var lines=parseLines(proxyInput.value);
   if(!lines.length){toast("请输入至少一个代理");return}
   var rounds=parseInt(roundsSelect.value)||2;
@@ -382,8 +401,10 @@ function startCheck(options){
     statusText.textContent="正在提交...";
   }
   var targetProfile=options.targetProfile||currentTargetProfile;
-  post("/api/start",{proxies:toCheck,rounds:rounds,target_profile:targetProfile,max_concurrent:maxConcurrent},function(err,res){
+  post("/api/start",{proxies:toCheck,rounds:rounds,target_profile:targetProfile,max_concurrent:maxConcurrent,token:getUserToken()},function(err,res){
     if(err){toast(err);finishCheck(false);return}
+    if(res&&res.auto_running){toast(res.error||'自动任务正在执行，请先停止自动任务');finishCheck(false);return}
+    if(res&&res.error){toast(res.error);finishCheck(false);return}
     sid=res.session_id; totalCount=res.total;
     currentTargetProfile=res.target_profile||targetProfile;
     if(res.max_concurrent&&concurrentInput){
@@ -502,69 +523,139 @@ function getResultErrorText(r){
   return '';
 }
 
+function getRecommendedUseLabel(use){
+  var map={
+    web_api:'网页+API',
+    web:'网页可用',
+    api:'API可用',
+    generic:'基础代理',
+    unstable:'不稳定',
+    invalid:'失效'
+  };
+  return map[use]||'待判断';
+}
+
+function getRecommendedUseTitle(use){
+  var map={
+    web_api:'网页和 API 域名都测通了，优先拿来做目标服务相关访问。',
+    web:'目标网页能打开，但 API 域名不一定通，适合网页访问。',
+    api:'API 域名能连上，适合程序请求；不代表账号、Key 或额度可用。',
+    generic:'基础代理能连通并能拿到出口 IP，适合先收进池子再按目标复测。',
+    unstable:'有成功记录但不稳定，可能受网络波动、代理限速或目标封锁影响。',
+    invalid:'这次检测没体现可用价值，通常是连接失败、超时或目标不可达。'
+  };
+  return map[use]||'还没有足够信息判断这条代理更适合怎么用。';
+}
+
+function getGradeTitle(grade){
+  var map={
+    A:'等级 A：网页和 API 都稳定可达，整体最值得优先使用。',
+    B:'等级 B：目标网页或 API 至少一项稳定可达，有实际用途。',
+    C:'等级 C：基础代理可用，但目标专项能力一般。',
+    D:'等级 D：有成功记录但多轮不稳定，建议复测后再用。',
+    F:'等级 F：基础连接或目标检测失败，不建议使用。',
+    '?':'等级未知：这条记录来自导入或旧数据，还没有完整检测结果。'
+  };
+  return map[grade]||map['?'];
+}
+
+function getFinalBadgeTitle(grade,state){
+  if(state==='valid')return '最终结论：这条代理对当前检测模式有实际用途。'+getGradeTitle(grade);
+  if(state==='unstable')return '最终结论：有成功但不够稳定，建议复测后再用。'+getGradeTitle(grade);
+  return '最终结论：这条代理当前不建议使用。'+getGradeTitle(grade);
+}
+
+function getIpTypeTitle(type){
+  if(type==='datacenter')return '机房 IP，通常来自云服务器或数据中心，速度可能好，但更容易被风控。';
+  if(type==='residential')return '住宅 IP，通常更像普通家庭宽带，可能更容易通过风控，但稳定性不保证。';
+  return '查到了出口 IP，但暂时无法判断它是机房、住宅还是其它类型。';
+}
+
+function tagTitle(kind,value){
+  var text={
+    target:'检测模式：'+(value||'当前模式')+'。结果只代表当前服务器跑这个模式时的网络可达性。',
+    service_ok:'目标首页或网页入口能通过这个代理打开，说明网页访问路径可用。',
+    service_fail:'目标首页或网页入口没通过这个代理打通；API 可能仍单独可用。',
+    ip:'目标网站看到的是这个出口 IP，不一定等于你填写的代理服务器 IP。',
+    country:'出口 IP 查询到的国家或地区，结果依赖第三方 IP 数据库。',
+    cf_ok:'目标网页没有被 Cloudflare 挑战页卡住，网页访问更接近真实可用。',
+    cf_fail:'访问目标网页时撞上 Cloudflare 挑战或拦截页，浏览器里可能需要额外验证。',
+    cf_unknown:'这个模式会看 CF，但本次没有确认成功绕过 Cloudflare。',
+    api_ok:'目标 API 域名能连上。401/403 也算域名可达，不代表账号、Key 或额度可用。',
+    api_fail:'目标 API 域名没连通，可能是代理、DNS、TLS 或目标侧拦截导致。',
+    api_unknown:'当前检测模式没有拿到 API 结果，不能据此判断 API 是否可用。',
+    checks:'多轮检测通过数/总轮数，数字越接近满分越稳定。',
+    latency:'通过这个代理完成检测请求的大致耗时，越低越快，但只代表本次检测。',
+    error:'后端返回的失败原因或 HTTP 状态，仅用于排查，不一定代表代理完全不可用。'
+  };
+  return text[kind]||'这个标签是当前检测结果的一项摘要。';
+}
+
+function tagHTML(className,content,title,style){
+  var cls='tag'+(className?' '+className:'');
+  var attrs='class="'+attr(cls)+'"';
+  if(style)attrs+=' style="'+attr(style)+'"';
+  if(title)attrs+=' title="'+attr(title)+'"';
+  return '<span '+attrs+'>'+content+'</span>';
+}
+
 function itemHTML(r,type){
   var lat=r.latency?r.latency+"ms":"-";
   var spd=r.latency?(r.latency<1000?"speed-fast":r.latency<3000?"speed-mid":"speed-slow"):"";
   var err=getResultErrorText(r);
-  var errTag=err?'<span style="color:#555">'+esc(err)+'</span>':'';
+  var errTag=err?'<span style="color:#555" title="'+attr(tagTitle('error'))+'">'+esc(err)+'</span>':'';
   var profileId=r.target_profile||currentTargetProfile;
-  var isOpenAI=profileId==='openai';
-  var targetTag=r.target_name?'<span class="tag" style="background:rgba(255,255,255,.06);color:#aaa">'+esc(r.target_name)+'</span>':'';
+  var profileInfo=getTargetProfileInfo(profileId);
+  var hasCfDetection=!!profileInfo.has_cf_detection||!!r.cf_challenge;
+  var targetTag=r.target_name?tagHTML('',esc(r.target_name),tagTitle('target',r.target_name),'background:rgba(255,255,255,.06);color:#aaa'):'';
+  var useTag=r.recommended_use?tagHTML('tag-ok',esc(getRecommendedUseLabel(r.recommended_use)),getRecommendedUseTitle(r.recommended_use)):'';
   var serviceTag='';
-  if(r.service_reachable===true) serviceTag='<span class="tag tag-ok">服务可达</span>';
-  else if(r.service_reachable===false) serviceTag='<span class="tag tag-fail">服务不可达</span>';
+  if(r.service_reachable===true) serviceTag=tagHTML('tag-ok','服务可达',tagTitle('service_ok'));
+  else if(r.service_reachable===false) serviceTag=tagHTML('tag-fail','服务不可达',tagTitle('service_fail'));
 
   // Grade badge
   var gradeColors={'A':'#22c55e','B':'#10b981','C':'#eab308','D':'#f97316','F':'#ef4444'};
-  var gradeLabels={'A':'最优','B':'良好','C':'可用','D':'仅首页','F':'失效'};
+  var gradeLabels={'A':'最优','B':'目标可用','C':'基础可用','D':'不稳定','F':'失效'};
   var g=r.grade||'F';
-  var gradeTag='<span class="tag" style="background:rgba(0,0,0,.3);color:'+(gradeColors[g]||'#888')+';font-weight:700">等级'+g+'</span>';
+  var gradeTag=tagHTML('','等级'+esc(g),getGradeTitle(g),'background:rgba(0,0,0,.3);color:'+(gradeColors[g]||'#888')+';font-weight:700');
 
   // IP tag
-  var ipTag=r.ip?'<span class="tag tag-ip" title="目标网站看到的出口 IP">IP: '+esc(r.ip)+'</span>':'';
+  var ipTag=r.ip?tagHTML('tag-ip','IP: '+esc(r.ip),tagTitle('ip')):'';
   var country=getResultCountry(r);
-  var countryTag=country?'<span class="tag tag-country" title="出口 IP 所在国家或地区">国家: '+esc(country)+'</span>':'';
+  var countryTag=country?tagHTML('tag-country','国家: '+esc(country),tagTitle('country')):'';
   // IP type tag
   var ipTypeTag='';
-  if(r.ip_type==='datacenter') ipTypeTag='<span class="tag tag-dc">机房</span>';
-  else if(r.ip_type==='residential') ipTypeTag='<span class="tag tag-res">住宅</span>';
-  else if(r.ip) ipTypeTag='<span class="tag" style="background:rgba(255,255,255,.06);color:#666">类型未知</span>';
+  if(r.ip_type==='datacenter') ipTypeTag=tagHTML('tag-dc','机房',getIpTypeTitle(r.ip_type));
+  else if(r.ip_type==='residential') ipTypeTag=tagHTML('tag-res','住宅',getIpTypeTitle(r.ip_type));
+  else if(r.ip) ipTypeTag=tagHTML('','类型未知',getIpTypeTitle(r.ip_type),'background:rgba(255,255,255,.06);color:#666');
 
   // CF bypass tag
   var cfTag='';
-  if(isOpenAI){
-    if(r.cf_bypass) cfTag='<span class="tag tag-cf">&#9989; CF绕过</span>';
-    else if(r.cf_challenge) cfTag='<span class="tag tag-cf-fail">&#10060; CF拦截('+esc(r.cf_challenge_type||'?')+')</span>';
-    else cfTag='<span class="tag" style="background:rgba(255,255,255,.06);color:#666">CF未通过</span>';
+  if(hasCfDetection){
+    if(r.cf_bypass) cfTag=tagHTML('tag-cf','&#9989; CF绕过',tagTitle('cf_ok'));
+    else if(r.cf_challenge) cfTag=tagHTML('tag-cf-fail','&#10060; CF拦截('+esc(r.cf_challenge_type||'?')+')',tagTitle('cf_fail'));
+    else cfTag=tagHTML('','CF未通过',tagTitle('cf_unknown'),'background:rgba(255,255,255,.06);color:#666');
   }
 
   // API tag
   var apiTag='';
-  if(r.api_reachable===true) apiTag='<span class="tag tag-ok">API可达</span>';
-  else if(r.api_reachable===false) apiTag='<span class="tag tag-fail">API不可达</span>';
-  else if(isOpenAI) apiTag='<span class="tag" style="background:rgba(255,255,255,.06);color:#666">API未检测</span>';
-
-  // Registration tag
-  var regTag='';
-  if(isOpenAI){
-    if(r.registration_ready) regTag='<span class="tag tag-reg">&#9989; 可注册</span>';
-    else if(r.registration_detail) regTag='<span class="tag tag-reg-fail">&#10060; 注册受限</span>';
-    else regTag='<span class="tag" style="background:rgba(255,255,255,.06);color:#666">注册未检测</span>';
-  }
+  if(r.api_reachable===true) apiTag=tagHTML('tag-ok','API域名可达',tagTitle('api_ok'));
+  else if(r.api_reachable===false) apiTag=tagHTML('tag-fail','API域名不可达',tagTitle('api_fail'));
+  else if(profileInfo.has_api) apiTag=tagHTML('','API未检测',tagTitle('api_unknown'),'background:rgba(255,255,255,.06);color:#666');
 
   // Check count tag
   var chkTag='';
   if(r.checks_total!==undefined){
     var pct=(r.checks_passed||0)+"/"+r.checks_total;
-    chkTag=r.valid?'<span class="tag tag-ok">'+pct+'</span>':
-           r.unstable?'<span class="tag tag-unstable">'+pct+'</span>':
-           '<span class="tag tag-fail">'+pct+'</span>';
+    chkTag=r.valid?tagHTML('tag-ok',esc(pct),tagTitle('checks')):
+           r.unstable?tagHTML('tag-unstable',esc(pct),tagTitle('checks')):
+           tagHTML('tag-fail',esc(pct),tagTitle('checks'));
   }
 
   // Badge
-  var badge=r.valid?'<span class="tag tag-ok">'+gradeLabels[g]+'</span>':
-            r.unstable?'<span class="tag tag-unstable">不稳定</span>':
-            '<span class="tag tag-fail">'+gradeLabels[g]+'</span>';
+  var badge=r.valid?tagHTML('tag-ok',esc(gradeLabels[g]||''),getFinalBadgeTitle(g,'valid')):
+            r.unstable?tagHTML('tag-unstable','不稳定',getFinalBadgeTitle(g,'unstable')):
+            tagHTML('tag-fail',esc(gradeLabels[g]||''),getFinalBadgeTitle(g,'invalid'));
   var repoBtn=type==='invalid'?'':'<button class="copy-btn" onclick="event.stopPropagation();addSingleResultToRepo(this)" data-p="'+esc(r.proxy)+'">添加到仓库</button>';
 
   // Detail panel (expandable)
@@ -575,21 +666,20 @@ function itemHTML(r,type){
     var rows='';
     if(d.service) rows+='<div class="detail-row"><span class="detail-key">服务:</span><span>'+(d.service.status||'-')+' '+(d.service.reachable?'<span style="color:#22c55e">可达</span>':'<span style="color:#ef4444">不可达</span>')+(d.service.cf_detected?' <span style="color:#ef4444">CF:'+esc(d.service.cf_type||'detected')+'</span>':'')+'</span></div>';
     else if(d.chat) rows+='<div class="detail-row"><span class="detail-key">首页:</span><span>'+(d.chat.status||'-')+(d.chat.cf_detected?' <span style="color:#ef4444">CF:'+esc(d.chat.cf_type||'detected')+'</span>':'')+'</span></div>';
-    if(d.signup) rows+='<div class="detail-row"><span class="detail-key">注册页:</span><span>'+(d.signup.status||'-')+' '+(d.signup.accessible?'<span style="color:#22c55e">可访问</span>':'<span style="color:#ef4444">'+esc(d.signup.detail||'不可达')+'</span>')+'</span></div>';
-    if(d.api) rows+='<div class="detail-row"><span class="detail-key">API:</span><span>'+(d.api.status||'-')+'</span></div>';
+    if(d.api) rows+='<div class="detail-row"><span class="detail-key">API域名:</span><span>'+(d.api.status||'-')+' '+(d.api.reachable?'<span style="color:#22c55e">可达</span>':'<span style="color:#ef4444">不可达</span>')+'</span></div>';
     if(d.ip_info) rows+='<div class="detail-row"><span class="detail-key">IP信息:</span><span>'+esc(d.ip_info.org||'')+' ('+esc(d.ip_info.country||'')+')</span></div>';
     if(r.cf_indicators && r.cf_indicators.length>0) rows+='<div class="detail-row"><span class="detail-key">CF特征:</span><span style="color:#ef4444">'+esc(r.cf_indicators.join(', '))+'</span></div>';
     detailHTML='<div class="detail-panel" id="'+detailId+'">'+rows+'</div>';
   }
 
-  return '<div class="proxy-item '+type+'" data-lat="'+(r.latency||99999)+'" data-err="'+(err?"y":"n")+'" data-stable="'+(r.valid?"y":r.unstable?"u":"n")+'" data-service="'+(r.service_reachable?"y":"n")+'" data-api="'+(r.api_reachable===true?"y":"n")+'" data-ip="'+(r.ip?"y":"n")+'" data-cf="'+(r.cf_bypass?"y":"n")+'" data-reg="'+(r.registration_ready?"y":"n")+'" data-cf-challenge="'+(r.cf_challenge_type||"")+'" data-grade="'+g+'" data-ip-type="'+(r.ip_type||"")+'" data-country="'+(country?"y":"n")+'" onclick="toggleDetail(\''+detailId+'\')">'+
+  return '<div class="proxy-item '+type+'" data-lat="'+(r.latency||99999)+'" data-err="'+(err?"y":"n")+'" data-stable="'+(r.valid?"y":r.unstable?"u":"n")+'" data-service="'+(r.service_reachable?"y":"n")+'" data-api="'+(r.api_reachable===true?"y":"n")+'" data-ip="'+(r.ip?"y":"n")+'" data-cf="'+(r.cf_bypass?"y":"n")+'" data-cf-challenge="'+(r.cf_challenge_type||"")+'" data-grade="'+g+'" data-ip-type="'+(r.ip_type||"")+'" data-country="'+(country?"y":"n")+'" onclick="toggleDetail(\''+detailId+'\')">'+
     '<div style="flex:1;min-width:0">'+
     '<div class="proxy-addr">'+esc(r.proxy)+'</div>'+
-    '<div class="proxy-meta">'+targetTag+gradeTag+chkTag+serviceTag+cfTag+regTag+ipTag+countryTag+ipTypeTag+apiTag+errTag+'</div>'+
+    '<div class="proxy-meta">'+targetTag+gradeTag+useTag+chkTag+serviceTag+cfTag+ipTag+countryTag+ipTypeTag+apiTag+errTag+'</div>'+
     detailHTML+
     '</div>'+
     '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'+
-    (r.latency?'<span class="tag tag-lat"><span class="speed-dot '+spd+'"></span>'+lat+'</span>':'')+
+    (r.latency?tagHTML('tag-lat','<span class="speed-dot '+spd+'"></span>'+esc(lat),tagTitle('latency')):'')+
     badge+
     repoBtn+
     '<button class="copy-btn" onclick="event.stopPropagation();clip(this)" data-p="'+esc(r.proxy)+'">复制</button>'+
@@ -611,18 +701,16 @@ function updateStats(){
   vCount.textContent=V.length+U.length;
   fCount.textContent=F.length;
 
-  // Count CF bypass and registration ready
   var allR=V.concat(U).concat(F);
   var profile=getTargetProfileInfo(currentTargetProfile);
-  if(currentTargetProfile==='openai'){
+  if(profile.has_cf_detection){
     sCfBypass.textContent=allR.filter(function(r){return r.cf_bypass}).length;
-    sRegReady.textContent=allR.filter(function(r){return r.registration_ready}).length;
   }else{
     sCfBypass.textContent=allR.filter(function(r){return r.service_reachable}).length;
-    sRegReady.textContent=profile.has_api?
-      allR.filter(function(r){return r.api_reachable===true}).length:
-      allR.filter(function(r){return r.ip}).length;
   }
+  sApiReachable.textContent=profile.has_api?
+    allR.filter(function(r){return r.api_reachable===true}).length:
+    allR.filter(function(r){return r.ip}).length;
 }
 function clip(el){copyText(el.dataset.p)}
 function copyValidProxies(){
@@ -647,7 +735,7 @@ function clearAll(){
   failList.innerHTML='<div class="empty">等待检测...</div>';
   vCount.textContent="0";fCount.textContent="0";
   sTotal.textContent="0";sValid.textContent="0";sUnstable.textContent="0";sInvalid.textContent="0";
-  sCfBypass.textContent="0";sRegReady.textContent="0";
+  sCfBypass.textContent="0";sApiReachable.textContent="0";
   sRate.textContent="0%";statusText.textContent="";
   updateProxyCount();
 }
@@ -702,7 +790,6 @@ document.querySelectorAll('.fbtn').forEach(function(btn){
       var err=item.dataset.err;
       var stb=item.dataset.stable;
       var cf=item.dataset.cf;
-      var reg=item.dataset.reg;
       var service=item.dataset.service;
       var api=item.dataset.api;
       var ip=item.dataset.ip;
@@ -711,8 +798,8 @@ document.querySelectorAll('.fbtn').forEach(function(btn){
       if(listId==='validList'){
         if(f==='stable')show=stb==='y';
         else if(f==='unstable')show=stb==='u';
-        else if(f==='cf_bypass')show=currentTargetProfile==='openai'?cf==='y':service==='y';
-        else if(f==='reg_ready')show=currentTargetProfile==='openai'?reg==='y':(getTargetProfileInfo(currentTargetProfile).has_api?api==='y':ip==='y');
+        else if(f==='cf_bypass')show=getTargetProfileInfo(currentTargetProfile).has_cf_detection?cf==='y':service==='y';
+        else if(f==='api_or_ip')show=getTargetProfileInfo(currentTargetProfile).has_api?api==='y':ip==='y';
         else if(f==='fast')show=lat<1000;
         else if(f==='mid')show=lat>=1000&&lat<3000;
         else if(f==='slow')show=lat>=3000;
@@ -740,7 +827,6 @@ function filterRepoList(f){
     else if(f==='service')show=item.dataset.service==='y';
     else if(f==='api')show=item.dataset.api==='y';
     else if(f==='cf')show=item.dataset.cf==='y';
-    else if(f==='reg')show=item.dataset.reg==='y';
     else if(f==='dc')show=item.dataset.ipType==='datacenter';
     else if(f==='res')show=item.dataset.ipType==='residential';
     else if(f==='country')show=item.dataset.country==='y';
@@ -802,7 +888,7 @@ function compactRepoItem(p){
   if(p.service_reachable===true)item.service_reachable=true;
   if(p.api_reachable===true)item.api_reachable=true;
   if(p.cf_bypass)item.cf_bypass=true;
-  if(p.registration_ready)item.registration_ready=true;
+  if(p.recommended_use)item.recommended_use=p.recommended_use;
   if(p.target_profile)item.target_profile=p.target_profile;
   if(p.target_name)item.target_name=p.target_name;
   item.added=p.added||Date.now();
@@ -832,6 +918,239 @@ function getUserToken(){
   }
   userTokenCache=t;
   return t;
+}
+
+// ============================================================
+// Auto mode — backend scheduler controls
+// ============================================================
+function updateAutoAvailability(hint){
+  var btn=document.getElementById('autoModeBtn');
+  var badge=document.getElementById('autoStatusBadge');
+  if(!btn||!badge)return;
+  if(autoModeAvailable){
+    btn.disabled=false;
+    btn.title='后台按计划自动拉取、检测并更新仓库';
+    badge.title='自动模式状态';
+  }else{
+    btn.disabled=true;
+    btn.title=hint||'当前部署不支持后台自动模式';
+    badge.className='auto-status-badge error';
+    badge.textContent='自动不可用';
+    badge.title=hint||'当前部署不支持后台自动模式';
+  }
+}
+
+function formatAutoTime(ts){
+  if(!ts)return '-';
+  var d=new Date(Number(ts)*1000);
+  if(isNaN(d.getTime()))return '-';
+  var pad=function(n){return n<10?'0'+n:String(n)};
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+
+function autoStatusText(data){
+  var state=(data&&data.state)||{};
+  var config=(data&&data.config)||{};
+  if(!autoModeAvailable)return '自动不可用';
+  if(state.running)return '自动运行中 '+(state.done||0)+'/'+(state.total||0);
+  if(!config.enabled)return '自动未开启';
+  if(state.status==='failed')return '自动上次失败';
+  if(state.status==='interrupted')return '自动曾中断';
+  if(state.status==='stopped')return '自动已停止';
+  return '等待下次 '+formatAutoTime(state.next_run_at);
+}
+
+function renderAutoStatus(data){
+  if(!data)return;
+  autoStatusCache=data;
+  var badge=document.getElementById('autoStatusBadge');
+  if(badge){
+    var state=data.state||{};
+    var config=data.config||{};
+    badge.textContent=autoStatusText(data);
+    badge.className='auto-status-badge';
+    if(state.running)badge.classList.add('running');
+    else if(config.enabled&&state.status!=='failed'&&state.status!=='interrupted')badge.classList.add('waiting');
+    else if(state.status==='failed'||state.status==='interrupted')badge.classList.add('error');
+    badge.title='服务器时间: '+((data.server_time&&data.server_time.text)||'-');
+  }
+  var stopBtn=document.getElementById('autoStopBtn');
+  if(stopBtn)stopBtn.disabled=!(data.state&&data.state.running);
+  renderAutoProgress(data);
+  if(data.state&&data.state.running)startAutoPolling(2500);
+  else startAutoPolling(10000);
+}
+
+function startAutoPolling(delay){
+  if(!autoModeAvailable||!authenticated)return;
+  clearTimeout(autoStatusTimer);
+  autoStatusTimer=setTimeout(loadAutoStatus,delay||5000);
+}
+
+function loadAutoStatus(callback){
+  if(!autoModeAvailable||!authenticated){
+    if(callback)callback(null);
+    return;
+  }
+  post('/api/auto/status',{token:getUserToken()},function(err,res){
+    if(!err&&res){
+      renderAutoStatus(res);
+      if(callback)callback(res);
+    }else if(callback)callback(null);
+  });
+}
+
+function autoProfileOptions(selected){
+  return targetProfiles.map(function(profile){
+    return '<option value="'+esc(profile.id)+'" '+(profile.id===selected?'selected':'')+'>'+esc(profile.name)+'</option>';
+  }).join('');
+}
+
+function renderAutoProgress(data){
+  var box=document.getElementById('autoProgress');
+  if(!box||!data)return;
+  var state=data.state||{};
+  var config=data.config||{};
+  var stageMap={
+    starting:'准备启动',
+    fetching:'拉取免费代理',
+    loading_repo:'合并仓库代理',
+    detecting:'批量检测',
+    updating_repo:'更新仓库',
+    stopping:'正在停止',
+    completed:'已完成',
+    stopped:'已停止',
+    failed:'失败',
+    interrupted:'已中断',
+    idle:'等待中',
+    disabled:'未开启'
+  };
+  var html='';
+  html+='<div>状态: '+esc(autoStatusText(data))+'</div>';
+  html+='<div>阶段: '+esc(stageMap[state.stage]||state.stage||'-')+'</div>';
+  html+='<div>服务器时间: '+esc((data.server_time&&data.server_time.text)||'-')+'</div>';
+  if(config.enabled)html+='<div>下次执行: '+esc(formatAutoTime(state.next_run_at))+'</div>';
+  if(state.running){
+    html+='<div>进度: '+(state.done||0)+'/'+(state.total||0)+'，有效 '+(state.valid_count||0)+'，不稳定 '+(state.unstable_count||0)+'，失效 '+(state.invalid_count||0)+'</div>';
+    html+='<div>来源 '+(state.source_count||0)+'，仓库 '+(state.repo_count||0)+'，跳过 '+(state.skipped||0)+'</div>';
+  }
+  if(state.last_summary){
+    var s=state.last_summary;
+    html+='<div>上次: '+esc(s.status||'-')+'，检测 '+(s.done||0)+'/'+(s.total||0)+'，入库 +'+(s.repo_added||0)+'，更新 '+(s.repo_updated||0)+'，删除 '+(s.repo_removed||0)+'</div>';
+    if(s.error)html+='<div style="color:#ef4444">错误: '+esc(s.error)+'</div>';
+  }
+  if(Array.isArray(state.history)&&state.history.length){
+    html+='<div class="auto-history">';
+    state.history.slice(-5).reverse().forEach(function(item){
+      html+='<div>'+esc(formatAutoTime(item.finished_at))+' · '+esc(item.status||'-')+' · '+(item.done||0)+'/'+(item.total||0)+' · 有效 '+(item.valid_count||0)+'</div>';
+    });
+    html+='</div>';
+  }
+  box.innerHTML=html;
+}
+
+function openAutoSettings(){
+  if(!requireAuthenticatedUI())return;
+  if(!autoModeAvailable){
+    toast('当前部署不支持后台自动模式');
+    return;
+  }
+  post('/api/auto/get',{token:getUserToken()},function(err,res){
+    if(err||res.error){
+      toast(err||res.error||'读取自动模式失败');
+      return;
+    }
+    renderAutoStatus(res);
+    showAutoModal(res);
+  });
+}
+
+function showAutoModal(data){
+  var config=(data&&data.config)||{};
+  var state=(data&&data.state)||{};
+  var overlay=document.createElement('div');
+  overlay.className='modal-overlay show';
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
+  var html='<div class="modal-box" style="max-width:640px;text-align:left">';
+  html+='<div class="modal-icon" style="background:linear-gradient(135deg,rgba(34,197,94,.15),rgba(34,197,94,.05));border-color:rgba(34,197,94,.22)">&#9201;</div>';
+  html+='<h3 style="text-align:center">自动模式</h3>';
+  html+='<div class="auto-progress" id="autoProgress"></div>';
+  html+='<div class="auto-form">';
+  html+='<div class="auto-field full"><label><input id="autoEnabled" type="checkbox" '+(config.enabled?'checked':'')+' style="width:auto;height:auto;margin-right:8px">启用后台自动检测</label></div>';
+  html+='<div class="auto-field"><label>时间规则</label><select id="autoScheduleType" onchange="updateAutoScheduleFields()"><option value="interval" '+(config.schedule_type==='interval'?'selected':'')+'>每隔 N 小时</option><option value="daily" '+(config.schedule_type==='daily'?'selected':'')+'>每天固定时间</option></select></div>';
+  html+='<div class="auto-field" id="autoIntervalField"><label>间隔小时</label><input id="autoIntervalHours" type="number" min="0.01" max="720" step="0.25" value="'+esc(config.interval_hours||6)+'"></div>';
+  html+='<div class="auto-field" id="autoDailyField"><label>固定时间（服务器）</label><input id="autoDailyTime" type="time" value="'+esc(config.daily_time||'03:00')+'"></div>';
+  html+='<div class="auto-field"><label>检测模式</label><select id="autoTargetProfile">'+autoProfileOptions(config.target_profile||currentTargetProfile)+'</select></div>';
+  html+='<div class="auto-field"><label>检测轮次</label><select id="autoRounds"><option value="1">1轮</option><option value="2">2轮</option><option value="3">3轮</option><option value="4">4轮</option><option value="5">5轮</option></select></div>';
+  html+='<div class="auto-field"><label>并发数量</label><input id="autoConcurrent" type="number" min="1" max="200" step="1" value="'+esc(config.max_concurrent||getConcurrentValue())+'"></div>';
+  html+='<div class="auto-field"><label>检测范围</label><select id="autoDetectMode"><option value="skip">只检测新代理</option><option value="force">强制检测全部</option></select></div>';
+  html+='<div class="auto-field full"><label>入库策略</label><select id="autoRepoPolicy"><option value="stable_only">只入库稳定可用(A/B/C)，复测失败旧代理会删除</option><option value="include_unstable">包含不稳定(A/B/C/D)，复测失败旧代理会删除</option><option value="archive_all">所有结果都留档，失效代理也保留</option></select></div>';
+  html+='</div>';
+  html+='<div class="auto-inline" style="justify-content:center;margin-top:12px">';
+  html+='<button class="btn btn-primary" onclick="saveAutoSettings()">保存设置</button>';
+  html+='<button class="btn btn-ghost" onclick="runAutoNow()">立即运行</button>';
+  html+='<button class="btn btn-danger" id="autoStopBtn" onclick="stopAutoNow()" '+(state.running?'':'disabled')+'>停止自动任务</button>';
+  html+='<button class="btn btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">关闭</button>';
+  html+='</div></div>';
+  overlay.innerHTML=html;
+  document.body.appendChild(overlay);
+  document.getElementById('autoRounds').value=String(config.rounds||2);
+  document.getElementById('autoDetectMode').value=config.detect_mode||'skip';
+  document.getElementById('autoRepoPolicy').value=config.repo_update_policy||'stable_only';
+  updateAutoScheduleFields();
+  renderAutoProgress(data);
+}
+
+function updateAutoScheduleFields(){
+  var type=document.getElementById('autoScheduleType');
+  var interval=document.getElementById('autoIntervalField');
+  var daily=document.getElementById('autoDailyField');
+  if(!type||!interval||!daily)return;
+  interval.style.display=type.value==='interval'?'flex':'none';
+  daily.style.display=type.value==='daily'?'flex':'none';
+}
+
+function readAutoConfigFromModal(){
+  return {
+    enabled:!!document.getElementById('autoEnabled').checked,
+    schedule_type:document.getElementById('autoScheduleType').value,
+    interval_hours:parseFloat(document.getElementById('autoIntervalHours').value)||6,
+    daily_time:document.getElementById('autoDailyTime').value||'03:00',
+    target_profile:document.getElementById('autoTargetProfile').value,
+    rounds:parseInt(document.getElementById('autoRounds').value)||2,
+    max_concurrent:parseInt(document.getElementById('autoConcurrent').value)||getConcurrentValue(),
+    detect_mode:document.getElementById('autoDetectMode').value,
+    repo_update_policy:document.getElementById('autoRepoPolicy').value
+  };
+}
+
+function saveAutoSettings(){
+  var config=readAutoConfigFromModal();
+  post('/api/auto/save',{token:getUserToken(),config:config},function(err,res){
+    if(err||res.error){toast('保存失败: '+(err||res.error));return}
+    renderAutoStatus(res);
+    toast('自动模式设置已保存');
+  });
+}
+
+function runAutoNow(){
+  var config=readAutoConfigFromModal();
+  post('/api/auto/save',{token:getUserToken(),config:config},function(saveErr,saveRes){
+    if(saveErr||saveRes.error){toast('保存失败: '+(saveErr||saveRes.error));return}
+    post('/api/auto/run-now',{token:getUserToken()},function(err,res){
+      if(err||res.error){toast(err||res.error||'启动失败');if(res)renderAutoStatus(res);return}
+      renderAutoStatus(res);
+      toast(res.started?'自动任务已启动':'自动任务已在运行');
+    });
+  });
+}
+
+function stopAutoNow(){
+  post('/api/auto/stop',{token:getUserToken()},function(err,res){
+    if(err){toast(err);return}
+    renderAutoStatus(res);
+    toast(res.stopped?'已请求停止自动任务':'当前没有自动任务');
+  });
 }
 
 function syncRepoToServer(repoOverride){
@@ -871,7 +1190,7 @@ function loadRepoFromServer(callback){
         var text=xhr.responseText.trim();
         if(!text){cb(0);return}
         var lines=text.split('\n').filter(function(l){return l.trim()});
-        var repo=lines.map(function(p){return {proxy:p,grade:'?',latency:null,ip:null,country:null,ip_type:null,service_reachable:null,api_reachable:null,cf_bypass:false,registration_ready:false,target_profile:'generic',target_name:'常规代理检测',added:Date.now()}});
+        var repo=lines.map(function(p){return {proxy:p,grade:'?',latency:null,ip:null,country:null,ip_type:null,service_reachable:null,api_reachable:null,cf_bypass:false,recommended_use:'generic',target_profile:'generic',target_name:'常规代理检测',added:Date.now()}});
         cb(repo.length,repo);
       }else{cb(0)}
     };
@@ -1073,7 +1392,7 @@ function resultToRepoItem(r){
     service_reachable:r.service_reachable,
     api_reachable:r.api_reachable,
     cf_bypass:r.cf_bypass,
-    registration_ready:r.registration_ready,
+    recommended_use:r.recommended_use,
     target_profile:r.target_profile||currentTargetProfile,
     target_name:r.target_name||getTargetProfileInfo(currentTargetProfile).name,
     added:Date.now(),
@@ -1132,27 +1451,27 @@ function renderRepo(){
     var p=entry.item;
     var i=entry.index;
     var gradeColors={'A':'#22c55e','B':'#10b981','C':'#eab308','D':'#f97316','F':'#ef4444'};
-    var gradeLabels={'A':'最优','B':'良好','C':'可用','D':'仅首页','F':'失效'};
+    var gradeLabels={'A':'最优','B':'目标可用','C':'基础可用','D':'不稳定','F':'失效','?':'待判断'};
     var g=p.grade||'F';
     var lat=p.latency?p.latency+'ms':'-';
     var spd=p.latency?(p.latency<1000?"speed-fast":p.latency<3000?"speed-mid":"speed-slow"):"";
     var country=p.country?String(p.country).toUpperCase():'';
-    html+='<div class="proxy-item valid" data-lat="'+(p.latency||99999)+'" data-grade="'+g+'" data-service="'+(p.service_reachable===true?"y":"n")+'" data-api="'+(p.api_reachable===true?"y":"n")+'" data-cf="'+(p.cf_bypass?"y":"n")+'" data-reg="'+(p.registration_ready?"y":"n")+'" data-ip-type="'+(p.ip_type||"")+'" data-country="'+(country?"y":"n")+'">'+
+    html+='<div class="proxy-item valid" data-lat="'+(p.latency||99999)+'" data-grade="'+g+'" data-service="'+(p.service_reachable===true?"y":"n")+'" data-api="'+(p.api_reachable===true?"y":"n")+'" data-cf="'+(p.cf_bypass?"y":"n")+'" data-ip-type="'+(p.ip_type||"")+'" data-country="'+(country?"y":"n")+'">'+
       '<div style="flex:1;min-width:0">'+
       '<div class="proxy-addr">'+esc(p.proxy)+'</div>'+
       '<div class="proxy-meta">'+
-      (p.target_name?'<span class="tag" style="background:rgba(255,255,255,.06);color:#aaa">'+esc(p.target_name)+'</span>':'')+
-      '<span class="tag" style="background:rgba(0,0,0,.3);color:'+(gradeColors[g]||'#888')+';font-weight:700">等级'+g+'</span>'+
-      (p.service_reachable?'<span class="tag tag-ok">服务可达</span>':'')+
-      (p.api_reachable===true?'<span class="tag tag-ok">API可达</span>':'')+
-      (country?'<span class="tag tag-country">国家: '+esc(country)+'</span>':'')+
-      (p.ip_type==='datacenter'?'<span class="tag tag-dc">机房</span>':p.ip_type==='residential'?'<span class="tag tag-res">住宅</span>':'')+
-      (p.cf_bypass?'<span class="tag tag-cf">CF绕过</span>':'')+
-      (p.registration_ready?'<span class="tag tag-reg">可注册</span>':'')+
+      (p.target_name?tagHTML('',esc(p.target_name),tagTitle('target',p.target_name),'background:rgba(255,255,255,.06);color:#aaa'):'')+
+      tagHTML('','等级'+esc(g),getGradeTitle(g),'background:rgba(0,0,0,.3);color:'+(gradeColors[g]||'#888')+';font-weight:700')+
+      (p.recommended_use?tagHTML('tag-ok',esc(getRecommendedUseLabel(p.recommended_use)),getRecommendedUseTitle(p.recommended_use)):'')+
+      (p.service_reachable===true?tagHTML('tag-ok','服务可达',tagTitle('service_ok')):'')+
+      (p.api_reachable===true?tagHTML('tag-ok','API域名可达',tagTitle('api_ok')):'')+
+      (country?tagHTML('tag-country','国家: '+esc(country),tagTitle('country')):'')+
+      (p.ip_type==='datacenter'?tagHTML('tag-dc','机房',getIpTypeTitle(p.ip_type)):p.ip_type==='residential'?tagHTML('tag-res','住宅',getIpTypeTitle(p.ip_type)):'')+
+      (p.cf_bypass?tagHTML('tag-cf','CF绕过',tagTitle('cf_ok')):'')+
       '</div></div>'+
       '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'+
-      (p.latency?'<span class="tag tag-lat"><span class="speed-dot '+spd+'"></span>'+lat+'</span>':'')+
-      '<span class="tag tag-ok">'+(gradeLabels[g]||'')+'</span>'+
+      (p.latency?tagHTML('tag-lat','<span class="speed-dot '+spd+'"></span>'+esc(lat),tagTitle('latency')):'')+
+      tagHTML('tag-ok',esc(gradeLabels[g]||''),getFinalBadgeTitle(g,g==='D'?'unstable':g==='F'?'invalid':'valid'))+
       '<button class="copy-btn" style="opacity:0.6" onclick="event.stopPropagation();clip(this)" data-p="'+esc(p.proxy)+'">复制</button>'+
       '<button class="copy-btn" style="opacity:0.6;color:#ef4444" onclick="event.stopPropagation();removeFromRepo('+i+')">删除</button>'+
       '</div></div>';
@@ -1261,7 +1580,7 @@ function importRepoTxt(input){
     var added=0;
     lines.forEach(function(proxy){
       if(!existingSet[proxy]){
-        repo.push({proxy:proxy,grade:"?",latency:null,ip:null,country:null,ip_type:null,service_reachable:null,api_reachable:null,cf_bypass:false,registration_ready:false,target_profile:'generic',target_name:'常规代理检测',added:Date.now()});
+        repo.push({proxy:proxy,grade:"?",latency:null,ip:null,country:null,ip_type:null,service_reachable:null,api_reachable:null,cf_bypass:false,recommended_use:'generic',target_profile:'generic',target_name:'常规代理检测',added:Date.now()});
         existingSet[proxy]=true;
         added++;
       }

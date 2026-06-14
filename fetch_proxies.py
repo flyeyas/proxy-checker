@@ -8,6 +8,11 @@ import subprocess
 from curl_cffi import requests as cffi_requests
 
 IP_PORT_RE = re.compile(r"(?<!\d)((?:\d{1,3}\.){3}\d{1,3}):(\d{2,5})(?!\d)")
+PROXY_URL_RE = re.compile(
+    r"(?:(http|https|socks4|socks5)://)?"
+    r"(?<!\d)((?:\d{1,3}\.){3}\d{1,3}):(\d{2,5})(?!\d)",
+    re.IGNORECASE,
+)
 
 PROXY_SOURCES = [
     {
@@ -16,24 +21,158 @@ PROXY_SOURCES = [
         "url": "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json",
     },
     {
-        "id": "proxynova",
-        "name": "ProxyNova Proxy Server List",
-        "url": "https://www.proxynova.com/proxy-server-list/",
+        "id": "databay_http",
+        "name": "Databay HTTP Verified",
+        "url": "https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/http.txt",
+        "parser": "plain",
+        "protocol": "http",
     },
     {
-        "id": "hidemn",
-        "name": "hidemy.name Proxy List",
-        "url": "https://hide.mn/en/proxy-list/",
+        "id": "databay_socks4",
+        "name": "Databay SOCKS4 Verified",
+        "url": "https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/socks4.txt",
+        "parser": "plain",
+        "protocol": "socks4",
     },
     {
-        "id": "freeproxy",
-        "name": "Free-Proxy-List.net Socks",
-        "url": "https://free-proxy-list.net/zh-cn/socks-proxy.html",
+        "id": "databay_socks5",
+        "name": "Databay SOCKS5 Verified",
+        "url": "https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/socks5.txt",
+        "parser": "plain",
+        "protocol": "socks5",
     },
     {
-        "id": "checkerproxy",
-        "name": "CheckerProxy.net Archive",
-        "url": "https://api.checkerproxy.net/v1/landing/archive",
+        "id": "iplocate_all",
+        "name": "IPLocate All Verified Proxies",
+        "url": "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/all-proxies.txt",
+        "parser": "plain",
+        "protocol": None,
+    },
+    {
+        "id": "iplocate_http",
+        "name": "IPLocate HTTP Verified",
+        "url": "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/http.txt",
+        "parser": "plain",
+        "protocol": "http",
+    },
+    {
+        "id": "iplocate_socks4",
+        "name": "IPLocate SOCKS4 Verified",
+        "url": "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/socks4.txt",
+        "parser": "plain",
+        "protocol": "socks4",
+    },
+    {
+        "id": "iplocate_socks5",
+        "name": "IPLocate SOCKS5 Verified",
+        "url": "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/socks5.txt",
+        "parser": "plain",
+        "protocol": "socks5",
+    },
+    {
+        "id": "roosterkid_https",
+        "name": "OpenProxyList HTTPS Checked",
+        "url": "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS.txt",
+        "parser": "plain",
+        "protocol": "http",
+    },
+    {
+        "id": "roosterkid_socks4",
+        "name": "OpenProxyList SOCKS4 Checked",
+        "url": "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS4.txt",
+        "parser": "plain",
+        "protocol": "socks4",
+    },
+    {
+        "id": "roosterkid_socks5",
+        "name": "OpenProxyList SOCKS5 Checked",
+        "url": "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5.txt",
+        "parser": "plain",
+        "protocol": "socks5",
+    },
+    {
+        "id": "thespeedx_http",
+        "name": "TheSpeedX HTTP List",
+        "url": "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt",
+        "parser": "plain",
+        "protocol": "http",
+    },
+    {
+        "id": "thespeedx_socks4",
+        "name": "TheSpeedX SOCKS4 List",
+        "url": "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks4.txt",
+        "parser": "plain",
+        "protocol": "socks4",
+    },
+    {
+        "id": "thespeedx_socks5",
+        "name": "TheSpeedX SOCKS5 List",
+        "url": "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt",
+        "parser": "plain",
+        "protocol": "socks5",
+    },
+    {
+        "id": "vpslab_all_proxies",
+        "name": "VPSLab All Proxies",
+        "url": "https://raw.githubusercontent.com/VPSLabCloud/VPSLab-Free-Proxy-List/main/all_proxies.txt",
+        "parser": "plain",
+        "protocol": None,
+    },
+    {
+        "id": "vpslab_all_elite",
+        "name": "VPSLab All Elite Proxies",
+        "url": "https://raw.githubusercontent.com/VPSLabCloud/VPSLab-Free-Proxy-List/main/all_elite.txt",
+        "parser": "plain",
+        "protocol": None,
+    },
+    {
+        "id": "vpslab_http_all",
+        "name": "VPSLab HTTP All",
+        "url": "https://raw.githubusercontent.com/VPSLabCloud/VPSLab-Free-Proxy-List/main/http_all.txt",
+        "parser": "plain",
+        "protocol": "http",
+    },
+    {
+        "id": "vpslab_http_ssl",
+        "name": "VPSLab HTTP SSL",
+        "url": "https://raw.githubusercontent.com/VPSLabCloud/VPSLab-Free-Proxy-List/main/http_ssl.txt",
+        "parser": "plain",
+        "protocol": "http",
+    },
+    {
+        "id": "vpslab_http_elite",
+        "name": "VPSLab HTTP Elite",
+        "url": "https://raw.githubusercontent.com/VPSLabCloud/VPSLab-Free-Proxy-List/main/http_elite.txt",
+        "parser": "plain",
+        "protocol": "http",
+    },
+    {
+        "id": "vpslab_http_anonymous",
+        "name": "VPSLab HTTP Anonymous",
+        "url": "https://raw.githubusercontent.com/VPSLabCloud/VPSLab-Free-Proxy-List/main/http_anonymous.txt",
+        "parser": "plain",
+        "protocol": "http",
+    },
+    {
+        "id": "vpslab_socks4_all",
+        "name": "VPSLab SOCKS4 All",
+        "url": "https://raw.githubusercontent.com/VPSLabCloud/VPSLab-Free-Proxy-List/main/socks4_all.txt",
+        "parser": "plain",
+        "protocol": "socks4",
+    },
+    {
+        "id": "vpslab_socks5_all",
+        "name": "VPSLab SOCKS5 All",
+        "url": "https://raw.githubusercontent.com/VPSLabCloud/VPSLab-Free-Proxy-List/main/socks5_all.txt",
+        "parser": "plain",
+        "protocol": "socks5",
+    },
+    {
+        "id": "hookzof_socks5",
+        "name": "Hookzof SOCKS5 List",
+        "url": "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
+        "parser": "plain",
+        "protocol": "socks5",
     },
     {
         "id": "spysme_http",
@@ -64,6 +203,26 @@ PROXY_SOURCES = [
         "id": "my_proxy",
         "name": "My-Proxy Hourly HTTP List",
         "url": "https://www.my-proxy.com/free-proxy-list.html",
+    },
+    {
+        "id": "proxynova",
+        "name": "ProxyNova Proxy Server List",
+        "url": "https://www.proxynova.com/proxy-server-list/",
+    },
+    {
+        "id": "hidemn",
+        "name": "hidemy.name Proxy List",
+        "url": "https://hide.mn/en/proxy-list/",
+    },
+    {
+        "id": "freeproxy",
+        "name": "Free-Proxy-List.net Socks",
+        "url": "https://free-proxy-list.net/zh-cn/socks-proxy.html",
+    },
+    {
+        "id": "checkerproxy",
+        "name": "CheckerProxy.net Archive",
+        "url": "https://api.checkerproxy.net/v1/landing/archive",
     },
 ]
 
@@ -350,15 +509,20 @@ def _fetch_spysme(url, limit, protocol):
 
 
 def _fetch_plain_ip_port(url, limit, protocol):
-    """Fetch plain text proxy lists in ip:port format."""
+    """Fetch plain text proxy lists, preserving URL protocols when requested."""
     resp = cffi_requests.get(url, timeout=20, impersonate="chrome")
     resp.raise_for_status()
     text = resp.text
 
     proxies = []
     seen = set()
-    for ip, port in IP_PORT_RE.findall(text):
-        _append_proxy(proxies, seen, ip, port, protocol)
+    for proto, ip, port in PROXY_URL_RE.findall(text):
+        detected_protocol = proto.lower()
+        if protocol is None:
+            chosen_protocol = detected_protocol
+        else:
+            chosen_protocol = protocol
+        _append_proxy(proxies, seen, ip, port, chosen_protocol)
         if len(proxies) >= limit:
             break
     if not proxies:
@@ -426,6 +590,8 @@ def _fetch_my_proxy(url, limit):
 
 def _fetch_source(source, limit):
     source_id = source["id"]
+    if source.get("parser") == "plain":
+        return _fetch_plain_ip_port(source["url"], limit, source.get("protocol"))
     if source_id == "proxifly":
         return _fetch_proxifly(source["url"], limit)
     if source_id == "proxynova":

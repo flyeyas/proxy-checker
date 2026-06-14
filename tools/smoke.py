@@ -21,6 +21,28 @@ EXPECTED_PROXY_SOURCES = {
     "proxyscrape_socks5",
     "geonode",
     "my_proxy",
+    "roosterkid_https",
+    "roosterkid_socks4",
+    "roosterkid_socks5",
+    "thespeedx_http",
+    "thespeedx_socks4",
+    "thespeedx_socks5",
+    "databay_http",
+    "databay_socks4",
+    "databay_socks5",
+    "iplocate_all",
+    "iplocate_http",
+    "iplocate_socks4",
+    "iplocate_socks5",
+    "vpslab_all_proxies",
+    "vpslab_all_elite",
+    "vpslab_http_all",
+    "vpslab_http_ssl",
+    "vpslab_http_elite",
+    "vpslab_http_anonymous",
+    "vpslab_socks4_all",
+    "vpslab_socks5_all",
+    "hookzof_socks5",
 }
 SMOKE_PROXY = "http://127.0.0.1:9"
 
@@ -81,7 +103,7 @@ def check_profile(base_url: str, profile_id: str, token: str) -> None:
     if status.get("total") != 1 or status.get("total_done") != 1:
         raise AssertionError(f"unexpected status for {profile_id}: {status}")
     result = status["new"][0]
-    for key in ("target_profile", "target_name", "service_reachable", "country", "checks_detail"):
+    for key in ("target_profile", "target_name", "base_reachable", "service_reachable", "recommended_use", "country", "checks_detail"):
         if key not in result:
             raise AssertionError(f"{profile_id} missing {key}: {result}")
 
@@ -93,9 +115,16 @@ def main() -> None:
     args = parser.parse_args()
 
     capabilities = post_json(args.base_url, "/api/capabilities", {})
+    if "auto_mode" not in capabilities:
+        raise AssertionError(f"capabilities missing auto_mode: {capabilities}")
+    if "auto_mode_hint" not in capabilities:
+        raise AssertionError(f"capabilities missing auto_mode_hint: {capabilities}")
     profile_ids = {item["id"] for item in capabilities.get("target_profiles", [])}
     if profile_ids != EXPECTED_PROFILES:
         raise AssertionError(f"unexpected target profiles: {profile_ids}")
+    profiles_with_signup = [item["id"] for item in capabilities.get("target_profiles", []) if item.get("has_signup")]
+    if profiles_with_signup:
+        raise AssertionError(f"signup detection should be disabled: {profiles_with_signup}")
     source_ids = {item["id"] for item in capabilities.get("proxy_sources", [])}
     if not EXPECTED_PROXY_SOURCES.issubset(source_ids):
         missing = EXPECTED_PROXY_SOURCES - source_ids
@@ -103,20 +132,39 @@ def main() -> None:
 
     auth_required = bool(capabilities.get("auth_required"))
     login_html = get_text(args.base_url, "/index.html")
-    if auth_required and 'id="password"' not in login_html:
+    if auth_required and 'id="password"' not in login_html and 'id="authPassword"' not in login_html:
         raise AssertionError("unauthenticated index.html should return login page")
+    if auth_required and "app.js" in login_html:
+        raise AssertionError("unauthenticated index.html should not return the main app shell")
 
     token = login(args.base_url, args.password)
 
     app_js = get_text(args.base_url, "/app.js", token=token)
     index_html = get_text(args.base_url, "/index.html", token=token)
-    for expected in ("function restoreActiveSession()", "function recheckRepo()", "target_profile"):
+    for expected in (
+        "function restoreActiveSession()",
+        "function recheckRepo()",
+        "function openAutoSettings()",
+        "function renderAutoStatus(",
+        "target_profile",
+    ):
         if expected not in app_js:
             raise AssertionError(f"app.js missing {expected}")
     if 'id="targetProfileDropdown"' not in index_html:
         raise AssertionError("index.html missing target profile dropdown")
+    if 'id="autoModeBtn"' not in index_html:
+        raise AssertionError("index.html missing auto mode button")
+    if 'id="autoStatusBadge"' not in index_html:
+        raise AssertionError("index.html missing auto status badge")
     if 'id="authOverlay"' not in index_html:
         raise AssertionError("index.html missing auth overlay")
+
+    auto_status = post_json(args.base_url, "/api/auto/status", {"token": "smoke_auto"}, token=token)
+    if capabilities.get("auto_mode"):
+        if not auto_status.get("auto_mode") or "config" not in auto_status or "state" not in auto_status:
+            raise AssertionError(f"unexpected auto status: {auto_status}")
+    elif auto_status.get("auto_mode") is not False:
+        raise AssertionError(f"serverless auto status should be unsupported: {auto_status}")
 
     default_started = post_json(args.base_url, "/api/start", {"proxies": [SMOKE_PROXY], "rounds": 1}, token=token)
     if default_started.get("target_profile") != "generic":

@@ -11,7 +11,6 @@ from curl_cffi import requests as cffi_requests
 
 
 DEFAULT_TARGET_CHAT = "https://chat.openai.com/"
-DEFAULT_TARGET_SIGNUP = "https://auth0.openai.com/u/signup/authorize?client_id=DRivsnm2Mu42T3KOpqdtwB3NYviHYzwD&scope=openid%20email%20profile%20offline_access%20model.request%20model.read%20organization.read%20organization.write&response_type=code&redirect_uri=https%3A%2F%2Fchatgpt.com%2Fapi%2Fauth%2Fcallback%2Flogin-web&audience=https%3A%2F%2Fapi.openai.com%2Fv1&prompt=login&screen_hint=signup"
 DEFAULT_TARGET_API = "https://api.openai.com/v1/models"
 DEFAULT_GENERIC_TARGET = "https://example.com/"
 DEFAULT_GROK_TARGET = "https://grok.com/"
@@ -49,14 +48,6 @@ OPENAI_REAL_PAGE_INDICATORS = (
     "prompt-textarea",
     "conversation-turn",
 )
-OPENAI_SIGNUP_INDICATORS = (
-    "signup",
-    "auth0",
-    "Create your account",
-    "email",
-    "password",
-    "Sign up",
-)
 PROTOCOL_PREFIXES = ("http://", "https://", "socks4://", "socks5://", "socks5h://")
 PROTOCOL_FALLBACK_STATUS_CODES = (200, 401, 403)
 DEFAULT_TARGET_PROFILE = "generic"
@@ -76,8 +67,6 @@ class TargetProfile:
     service_url: str
     service_indicators: Tuple[str, ...]
     api_url: Optional[str] = None
-    signup_url: Optional[str] = None
-    signup_indicators: Tuple[str, ...] = ()
     service_ok_statuses: Tuple[int, ...] = SERVICE_OK_STATUS_CODES
     api_ok_statuses: Tuple[int, ...] = API_OK_STATUS_CODES
     use_cf_detection: bool = False
@@ -95,9 +84,7 @@ TARGET_PROFILES: Dict[str, TargetProfile] = {
         name="OpenAI 检测",
         service_url=DEFAULT_TARGET_CHAT,
         api_url=DEFAULT_TARGET_API,
-        signup_url=DEFAULT_TARGET_SIGNUP,
         service_indicators=OPENAI_REAL_PAGE_INDICATORS,
-        signup_indicators=OPENAI_SIGNUP_INDICATORS,
         use_cf_detection=True,
     ),
     "grok": TargetProfile(
@@ -130,7 +117,8 @@ TARGET_PROFILE_OPTIONS: Tuple[Dict[str, object], ...] = tuple(
         "id": profile.id,
         "name": profile.name,
         "has_api": profile.api_url is not None,
-        "has_signup": profile.signup_url is not None,
+        "has_signup": False,
+        "has_cf_detection": profile.use_cf_detection,
     }
     for profile in TARGET_PROFILES.values()
 )
@@ -142,7 +130,6 @@ class CheckConfig:
     detect_timeout: int
     check_rounds: int
     target_chat: str = DEFAULT_TARGET_CHAT
-    target_signup: str = DEFAULT_TARGET_SIGNUP
     target_api: str = DEFAULT_TARGET_API
     ip_targets: Tuple[str, ...] = DEFAULT_IP_TARGETS
     ip_info_targets: Tuple[str, ...] = DEFAULT_IP_INFO_TARGETS
@@ -351,14 +338,9 @@ class ProxyCheckEngine:
         proxy = {"http": proxy_str, "https": proxy_str}
         request_timeout = timeout if timeout is not None else self.config.timeout
 
-        service_ok = self._probe_service(result, profile, proxy, request_timeout)
-        if not service_ok:
-            return result
-
+        self._probe_service(result, profile, proxy, request_timeout)
         if profile.api_url:
             self._probe_api(result, profile, proxy, request_timeout)
-        if profile.signup_url:
-            self._probe_signup(result, profile, proxy, request_timeout)
         if ip_hint:
             result.ip = ip_hint
             self._probe_ip_info(result)
@@ -382,15 +364,10 @@ class ProxyCheckEngine:
         proxy = {"http": proxy_str, "https": proxy_str}
         request_timeout = timeout if timeout is not None else self.config.timeout
 
-        service_ok = await self._probe_service_async(session, result, profile, proxy, request_timeout)
-        if not service_ok:
-            return result
-
+        await self._probe_service_async(session, result, profile, proxy, request_timeout)
         checks = []
         if profile.api_url:
             checks.append(self._probe_api_async(session, result, profile, proxy, request_timeout))
-        if profile.signup_url:
-            checks.append(self._probe_signup_async(session, result, profile, proxy, request_timeout))
         if ip_hint:
             result.ip = ip_hint
             checks.append(self._probe_ip_info_async(session, result))
@@ -610,64 +587,6 @@ class ProxyCheckEngine:
                 "error": error,
             }
 
-    def _probe_signup(
-        self,
-        result: RoundResult,
-        profile: TargetProfile,
-        proxy: Mapping[str, str],
-        timeout: int,
-    ) -> None:
-        if profile.signup_url is None:
-            return
-        try:
-            response = cffi_requests.get(
-                profile.signup_url,
-                proxies=dict(proxy),
-                timeout=timeout,
-                impersonate=self.config.impersonate,
-                allow_redirects=True,
-            )
-            _apply_signup_response(result, profile, response)
-        except Exception as exc:
-            error = classify_error(str(exc))
-            result.registration_ready = False
-            result.registration_detail = f"signup_error: {error}"
-            result.checks_detail["signup"] = {
-                "status": None,
-                "accessible": False,
-                "target": profile.signup_url,
-                "detail": error,
-            }
-
-    async def _probe_signup_async(
-        self,
-        session: cffi_requests.AsyncSession,
-        result: RoundResult,
-        profile: TargetProfile,
-        proxy: Mapping[str, str],
-        timeout: int,
-    ) -> None:
-        if profile.signup_url is None:
-            return
-        try:
-            response = await session.get(
-                profile.signup_url,
-                proxies=dict(proxy),
-                timeout=timeout,
-                allow_redirects=True,
-            )
-            _apply_signup_response(result, profile, response)
-        except Exception as exc:
-            error = classify_error(str(exc))
-            result.registration_ready = False
-            result.registration_detail = f"signup_error: {error}"
-            result.checks_detail["signup"] = {
-                "status": None,
-                "accessible": False,
-                "target": profile.signup_url,
-                "detail": error,
-            }
-
     def _probe_ip(self, result: RoundResult, proxy: Mapping[str, str]) -> None:
         for ip_endpoint in self.config.ip_targets:
             try:
@@ -789,6 +708,7 @@ class ProxyCheckEngine:
             "ip": None,
             "country": None,
             "ip_type": None,
+            "base_reachable": False,
             "service_reachable": False,
             "api_reachable": None,
             "cf_bypass": False,
@@ -797,6 +717,7 @@ class ProxyCheckEngine:
             "cf_indicators": [],
             "registration_ready": False,
             "registration_detail": None,
+            "recommended_use": "invalid",
             "detected_protocol": None,
             "target_profile": profile.id,
             "target_name": profile.name,
@@ -854,20 +775,6 @@ def _apply_api_response(result: RoundResult, profile: TargetProfile, response: o
         "status": status_code,
         "reachable": result.api_reachable,
         "target": profile.api_url,
-    }
-
-
-def _apply_signup_response(result: RoundResult, profile: TargetProfile, response: object) -> None:
-    status_code = int(getattr(response, "status_code", 0) or 0)
-    registration_ok, registration_detail = detect_signup_access(response, profile)
-    result.registration_ready = registration_ok
-    result.registration_detail = registration_detail
-    result.checks_detail["signup"] = {
-        "status": status_code,
-        "accessible": registration_ok,
-        "target": profile.signup_url,
-        "detail": registration_detail,
-        "final_url": getattr(response, "url", None),
     }
 
 
@@ -948,27 +855,42 @@ class ScoreAggregator:
         representative = self._representative(results)
         service_passed = sum(1 for result in results if result.service_reachable is True)
         api_passed = sum(1 for result in results if result.api_reachable is True)
-        registration_passed = sum(1 for result in results if result.registration_ready)
+        base_passed = sum(1 for result in results if result.ip)
         cf_passed = sum(1 for result in results if result.cf_bypass)
 
         service_ok = service_passed == self.rounds
-        api_ok = self.profile.api_url is None or api_passed == self.rounds
-        registration_ok = self.profile.signup_url is None or registration_passed == self.rounds
+        api_ok = self.profile.api_url is not None and api_passed == self.rounds
+        base_ok = base_passed == self.rounds
         cf_ok = not self.profile.use_cf_detection or cf_passed == self.rounds
 
-        if service_ok and api_ok and registration_ok and cf_ok:
-            grade = "A"
+        if self.profile.id == "generic":
+            valid = service_ok and base_ok
+            if valid:
+                grade = "A"
+            elif service_ok or base_ok:
+                grade = "C"
+            elif service_passed > 0 or base_passed > 0:
+                grade = "D"
+            else:
+                grade = "F"
         elif service_ok and api_ok and cf_ok:
+            grade = "A"
+            valid = True
+        elif service_ok or api_ok:
             grade = "B"
-        elif service_ok and api_ok:
+            valid = True
+        elif base_ok:
             grade = "C"
-        elif service_ok:
+            valid = True
+        elif service_passed > 0 or api_passed > 0 or base_passed > 0:
             grade = "D"
+            valid = False
         else:
             grade = "F"
+            valid = False
 
-        valid = service_ok and api_ok
-        unstable = (service_passed > 0 or api_passed > 0) and not valid
+        best_passed = max(service_passed, api_passed, base_passed)
+        unstable = best_passed > 0 and not valid
         latencies = [result.latency for result in results if result.latency is not None]
         latency = round(statistics.median(latencies)) if latencies else representative.latency
         detail = {
@@ -976,16 +898,21 @@ class ScoreAggregator:
             "service_passed": service_passed,
             "chat_passed": service_passed,
             "api_passed": api_passed,
-            "registration_passed": registration_passed,
+            "base_passed": base_passed,
+            "registration_passed": 0,
             "cf_bypass_passed": cf_passed,
+            "service_ok": service_ok,
+            "api_ok": api_ok,
+            "base_ok": base_ok,
             "target_profile": self.profile.id,
             "target_name": self.profile.name,
+            "recommended_use": _recommended_use(self.profile, service_ok, api_ok, base_ok, unstable),
         }
         return ScoreSummary(
             grade=grade,
             valid=valid,
             unstable=unstable,
-            checks_passed=service_passed,
+            checks_passed=best_passed,
             checks_total=self.rounds,
             latency=latency,
             representative=representative,
@@ -995,8 +922,6 @@ class ScoreAggregator:
     def _representative(self, results: Sequence[RoundResult]) -> RoundResult:
         if not results:
             return RoundResult(error="未完成检测")
-        if not any(result.valid for result in results):
-            return results[-1]
         return max(results, key=_result_score)
 
 
@@ -1063,22 +988,26 @@ def detect_cf_challenge(resp: object) -> Tuple[bool, Dict[str, object]]:
     return bool(details["cf_detected"]), details
 
 
-def detect_signup_access(resp: object, profile: TargetProfile) -> Tuple[bool, str]:
-    body = (getattr(resp, "text", "") or "").lower()
-    status = int(getattr(resp, "status_code", 0) or 0)
-    if status == 200:
-        if any(indicator.lower() in body for indicator in profile.signup_indicators):
-            return True, "signup_accessible"
-        if any(indicator in body for indicator in ("challenge-platform", "just a moment")):
-            return False, "cf_challenge_on_signup"
-        return True, "signup_200"
-    if status in (301, 302, 303, 307, 308):
-        return True, f"signup_redirect_{status}"
-    if status == 403:
-        return False, "signup_blocked_403"
-    if status == 407:
-        return False, "proxy_auth_required"
-    return False, f"signup_error_{status}"
+def _recommended_use(
+    profile: TargetProfile,
+    service_ok: bool,
+    api_ok: bool,
+    base_ok: bool,
+    unstable: bool,
+) -> str:
+    if profile.id == "generic":
+        if service_ok and base_ok:
+            return "generic"
+        return "unstable" if unstable else "invalid"
+    if service_ok and api_ok:
+        return "web_api"
+    if service_ok:
+        return "web"
+    if api_ok:
+        return "api"
+    if base_ok:
+        return "generic"
+    return "unstable" if unstable else "invalid"
 
 
 def _has_service_content(profile: TargetProfile, response: object, cf_details: Mapping[str, object]) -> bool:
@@ -1160,7 +1089,6 @@ def _build_public_result(
         "name": profile.name,
         "service": profile.service_url,
         "api": profile.api_url,
-        "signup": profile.signup_url,
     }
     return {
         "proxy": proxy,
@@ -1176,6 +1104,7 @@ def _build_public_result(
         "ip": result.ip,
         "country": result.country,
         "ip_type": result.ip_type,
+        "base_reachable": result.ip is not None,
         "service_reachable": result.service_reachable,
         "api_reachable": result.api_reachable,
         "cf_bypass": result.cf_bypass,
@@ -1184,6 +1113,7 @@ def _build_public_result(
         "cf_indicators": result.cf_indicators,
         "registration_ready": result.registration_ready,
         "registration_detail": result.registration_detail,
+        "recommended_use": summary.detail.get("recommended_use", "invalid"),
         "detected_protocol": protocol,
         "target_profile": profile.id,
         "target_name": profile.name,
@@ -1197,7 +1127,7 @@ def _result_score(result: RoundResult) -> Tuple[int, int, int, int, int]:
     return (
         1 if result.service_reachable is True else 0,
         1 if result.api_reachable is True else 0,
-        1 if result.registration_ready else 0,
+        1 if result.ip else 0,
         1 if result.cf_bypass else 0,
         -latency,
     )
@@ -1213,7 +1143,7 @@ def _summary_error(summary: ScoreSummary, result: RoundResult) -> Optional[str]:
         "稳定性不足("
         f"服务 {detail.get('service_passed', 0)}/{summary.checks_total}, "
         f"API {detail.get('api_passed', 0)}/{summary.checks_total}, "
-        f"注册 {detail.get('registration_passed', 0)}/{summary.checks_total})"
+        f"出口IP {detail.get('base_passed', 0)}/{summary.checks_total})"
     )
 
 

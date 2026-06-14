@@ -1,34 +1,32 @@
-# Proxy Checker v5
+# Proxy Checker v6.0
 
-Proxy Checker 是一个通用免费代理检测工具，支持 HTTP、HTTPS、SOCKS4、SOCKS5、SOCKS5H。它可以批量检测代理可用性，识别出口 IP、国家和 IP 类型，并按常规访问或 AI 服务专项规则筛选结果。
+Proxy Checker v6.0 是一个自托管优先的通用免费代理检测和仓库自动维护工具。它支持 HTTP、HTTPS、SOCKS4、SOCKS5、SOCKS5H，可以批量拉取持续更新的免费代理源，检测常规 HTTPS 连通性和 OpenAI、Grok、Gemini、Claude 等目标服务可达性，并把可用代理沉淀到可分享、可自动更新的个人仓库链接里。
+
+它的核心判断不是“全网代理质量”，而是“你当前部署服务器能否连通这些代理，并通过代理访问目标服务”。所以最推荐的用法，是把它部署在你真正要使用代理的服务器上，让检测结果贴近真实业务环境。
 
 项目地址：[strongshuai/proxy-checker](https://github.com/strongshuai/proxy-checker)
-<img width="3828" height="1962" alt="1781385018777_d" src="https://github.com/user-attachments/assets/0e640738-3bc3-436a-abf6-2c4cb6b85ee5" />
-
 
 ## 适合做什么
 
 - 从多个持续更新的免费代理源拉取代理。
 - 批量检测代理是否可用，并区分稳定、不稳定、失效。
+- 检查常规 HTTPS 连通性，或针对 OpenAI、Grok、Gemini、Claude 做专项可达性检测。
 - 保存可用代理到“我的仓库”，生成稳定 TXT 链接给其他程序拉取。
 - 对仓库代理再次检测、导入、导出、复制、按标签筛选。
-- 检查常规 HTTPS 连通性，或针对 OpenAI、Grok、Gemini、Claude 做专项可达性检测。
-<img width="2688" height="1560" alt="1781384983043_d" src="https://github.com/user-attachments/assets/861efcdc-6385-47c0-abe5-0d1fa7274655" />
 
-
-## v5 主要能力
+## v6.0 主要能力
 
 ### 通用检测模式
 
 - 常规代理检测：HTTPS 连通性、出口 IP、国家、IP 类型。
-- OpenAI 检测：ChatGPT 首页、OpenAI API、注册页、Cloudflare 识别。
+- OpenAI 检测：ChatGPT 首页、OpenAI API 域名、Cloudflare 识别。
 - Grok 检测：grok.com 和 xAI API。
 - Gemini 检测：gemini.google.com 和 Gemini API。
 - Claude 检测：claude.ai 和 Anthropic API。
 
 ### 免费代理源
 
-内置多个动态代理源，包括 Proxifly、ProxyNova、hide.mn、free-proxy-list、CheckerProxy、Spys.me、ProxyScrape、GeoNode、My-Proxy。前端支持单源拉取，也支持一键拉取所有免费代理源并去重。
+内置多个动态代理源，包括 Proxifly、Databay、IPLocate、OpenProxyList/Roosterkid、TheSpeedX、VPSLab、Hookzof、Spys.me、ProxyScrape、GeoNode、My-Proxy，以及保守保留的 ProxyNova、hide.mn、free-proxy-list、CheckerProxy。前端支持单源拉取，也支持一键拉取所有免费代理源并去重。
 
 ### 检测工作流
 
@@ -38,6 +36,19 @@ Proxy Checker 是一个通用免费代理检测工具，支持 HTTP、HTTPS、SO
 - 默认跳过已检测代理，也可以强制重检。
 - 检测过程中刷新页面不会打断 UI，页面会恢复并继续轮询后端任务。
 - 结果按有效、失效、我的仓库分组展示。
+- 有效结果会标记推荐用途：网页可用、API 可用、网页+API、基础代理。
+- 是否能注册账号受风控、手机号、邮箱、浏览器环境和历史行为影响，本工具不再用注册页 HTTP 访问来下结论。
+
+### 自动模式
+
+自托管 Python 服务支持后台自动模式。浏览器关闭后，后端仍会按计划拉取所有免费代理源，合并“我的仓库”里的代理，按设置的轮次、并发、检测模式批量检测，并把符合策略的结果同步到仓库 TXT / JSON 链接。
+
+- 支持每隔 N 小时执行，或按服务器本地时间每天固定 HH:MM 执行。
+- 支持只检测新代理，或强制检测全部代理。
+- 支持 `stable_only`、`include_unstable`、`archive_all` 三种入库策略。
+- 默认开启复测失败清理：旧仓库代理参与本轮复测且判定失效时会被移除；整体任务异常时不会删除旧仓库。
+- 自动任务运行中会拦截手动检测，避免同一台服务器被并发检测打爆。
+- Vercel / Serverless 不支持后台常驻自动模式，只会显示“不支持后台自动模式”。
 
 ### 我的仓库
 
@@ -45,7 +56,7 @@ Proxy Checker 是一个通用免费代理检测工具，支持 HTTP、HTTPS、SO
 - 添加到仓库后自动同步云端。
 - 每行有效代理可单独添加到仓库。
 - 仓库按最新添加或更新排序。
-- 仓库支持等级、服务可达、API 可达、CF 绕过、可注册、机房、住宅、国家等标签筛选。
+- 仓库支持等级、服务可达、API 域名可达、CF 绕过、机房、住宅、国家等标签筛选。
 - 仓库链接使用浏览器稳定 token，公共部署时不同用户不会互相覆盖。
 
 ### 访问密码
@@ -60,12 +71,30 @@ Proxy Checker 是一个通用免费代理检测工具，支持 HTTP、HTTPS、SO
 - 纯静态前端无法隐藏已经发布出去的 HTML，只能保护后端操作接口；需要完整页面门禁时请使用同源自托管部署。
 - 仓库 TXT / JSON 分享链接仍保持公开可拉取，方便给其他程序使用。
 
+## v5.0 到 v6.0 更新内容
+
+- 新增后台自动模式，自托管 Python 服务可在浏览器关闭后继续按计划执行。
+- 新增自动任务持久化：每个浏览器 token 独立保存配置、状态、历史摘要和下次运行时间。
+- 新增 `/api/auto/get`、`/api/auto/save`、`/api/auto/run-now`、`/api/auto/stop`、`/api/auto/status`。
+- 自动任务会拉取全部免费代理源，合并“我的仓库”代理，按代理字符串去重后批量检测。
+- 自动任务支持每隔 N 小时或每天固定服务器时间执行。
+- 自动任务支持只检测新代理或强制检测全部代理。
+- 自动任务支持三种入库策略：只入库稳定代理、包含不稳定代理、全部结果留档。
+- 默认启用复测失败清理：旧仓库代理本轮复测失效时会删除，任务整体异常时不会误删。
+- 自动任务运行中会拦截手动检测，避免服务器并发检测过载。
+- 前端新增自动模式按钮、设置弹窗、状态徽标、进度展示、立即运行和停止任务。
+- 刷新或重新打开浏览器后，可以恢复看到正在运行的自动任务状态。
+- Vercel / Serverless 明确降级为不支持后台自动模式，避免给用户错误预期。
+- Smoke test 增加自动模式能力开关、前端入口和状态接口检查。
+- README、PRODUCT 和页面版本号更新到 `v6.0`。
+
 ## v4 到 v5 更新内容
 
 - 从 ChatGPT / OpenAI 专用检测器升级为通用代理检测器。
 - 新增 `generic`、`openai`、`grok`、`gemini`、`claude` 五种检测模式。
-- 新增服务可达、API 可达、出口 IP、国家、IP 类型等通用结果字段。
-- 新增多个持续更新的免费代理源，并支持一键聚合拉取。
+- 新增服务可达、API 域名可达、出口 IP、国家、IP 类型、推荐用途等通用结果字段。
+- 取消注册页访问检测，不再用一个 HTTP 注册入口判断代理是否能注册账号。
+- 新增 Databay、IPLocate、OpenProxyList/Roosterkid、TheSpeedX、VPSLab、Hookzof 等持续更新的免费代理源，并支持一键聚合拉取。
 - 合并前端入口，根目录 `index.html` 和 `app.js` 是唯一前端源码。
 - 我的仓库改为浏览器稳定 token，避免公共部署互相覆盖。
 - 我的仓库新增标签筛选、单行添加、自动云端同步、最新置顶。

@@ -248,8 +248,7 @@ def api_status():
                         "valid_count": sum(1 for r in all_r if r.get("valid")),
                         "unstable_count": sum(1 for r in all_r if r.get("unstable")),
                         "invalid_count": sum(1 for r in all_r if not r.get("valid") and not r.get("unstable")),
-                        "cf_bypass_count": sum(1 for r in all_r if r.get("cf_bypass")),
-                        "registration_count": sum(1 for r in all_r if r.get("registration_ready"))})
+                        "cf_bypass_count": sum(1 for r in all_r if r.get("cf_bypass"))})
 
 @app.route('/api/stop', methods=['POST'])
 def api_stop():
@@ -267,9 +266,23 @@ def api_capabilities():
     try:
         from fetch_proxies import PROXY_SOURCES
         sources = [{"id": s["id"], "name": s["name"]} for s in PROXY_SOURCES]
-        return jsonify({"nodriver": False, "xvfb": False, "deep_check": False, "fetch_proxies": True, "target_profiles": list(TARGET_PROFILE_OPTIONS), "max_concurrent": MAX_CONCURRENT, "max_concurrent_limit": MAX_CONCURRENT_LIMIT, "auth_required": is_auth_enabled(), "authenticated": is_request_authenticated(), "proxy_sources": sources, "hosted": "vercel"})
+        return jsonify({"nodriver": False, "xvfb": False, "deep_check": False, "fetch_proxies": True, "target_profiles": list(TARGET_PROFILE_OPTIONS), "max_concurrent": MAX_CONCURRENT, "max_concurrent_limit": MAX_CONCURRENT_LIMIT, "auth_required": is_auth_enabled(), "authenticated": is_request_authenticated(), "auto_mode": False, "auto_mode_hint": "Vercel / Serverless 不支持后台自动模式，请使用自托管 Python 服务", "proxy_sources": sources, "hosted": "vercel"})
     except ImportError:
-        return jsonify({"nodriver": False, "xvfb": False, "deep_check": False, "fetch_proxies": False, "target_profiles": list(TARGET_PROFILE_OPTIONS), "max_concurrent": MAX_CONCURRENT, "max_concurrent_limit": MAX_CONCURRENT_LIMIT, "auth_required": is_auth_enabled(), "authenticated": is_request_authenticated(), "proxy_sources": [], "hosted": "vercel"})
+        return jsonify({"nodriver": False, "xvfb": False, "deep_check": False, "fetch_proxies": False, "target_profiles": list(TARGET_PROFILE_OPTIONS), "max_concurrent": MAX_CONCURRENT, "max_concurrent_limit": MAX_CONCURRENT_LIMIT, "auth_required": is_auth_enabled(), "authenticated": is_request_authenticated(), "auto_mode": False, "auto_mode_hint": "Vercel / Serverless 不支持后台自动模式，请使用自托管 Python 服务", "proxy_sources": [], "hosted": "vercel"})
+
+@app.route('/api/auto/get', methods=['POST'])
+@app.route('/api/auto/save', methods=['POST'])
+@app.route('/api/auto/run-now', methods=['POST'])
+@app.route('/api/auto/stop', methods=['POST'])
+@app.route('/api/auto/status', methods=['POST'])
+def api_auto_unsupported():
+    if not is_request_authenticated():
+        return unauthorized_response()
+    return jsonify({
+        "auto_mode": False,
+        "error": "Vercel / Serverless 不支持后台自动模式，请使用自托管 Python 服务",
+        "server_time": {"timestamp": int(time.time()), "text": time.strftime("%Y-%m-%d %H:%M:%S")},
+    })
 
 @app.route('/api/fetch-proxies', methods=['POST'])
 def api_fetch_proxies():

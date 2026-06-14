@@ -10,9 +10,11 @@ Users batch-check free proxy lists for general HTTPS access and AI service reach
 
 ## Product Purpose
 
-Proxy Checker v5 verifies HTTP, HTTPS, SOCKS4, SOCKS5, and SOCKS5H proxies against a generic target plus optional OpenAI, Grok, Gemini, and Claude profiles. It reports stability, service reachability, API reachability, exit IP, country, IP type, and helps users save, re-check, export, sync, and share usable proxies.
+Proxy Checker v6.0 is a self-hosted-first proxy checking and repository automation tool. It verifies HTTP, HTTPS, SOCKS4, SOCKS5, and SOCKS5H proxies against a generic target plus optional OpenAI, Grok, Gemini, and Claude profiles. It reports stability, service reachability, API-domain reachability, exit IP, country, IP type, recommended use, and helps users save, re-check, export, sync, schedule, and share usable proxies.
 
 Detection results are deployment-relative. The recommended deployment target is the same server that will actually use the proxies, because a proxy that is reachable from one server may be unreachable from another. The product should explain this clearly instead of implying globally valid proxy quality.
+
+Account registration should not be inferred from a registration-page HTTP probe. Signup success depends on platform risk controls, phone/email inputs, browser state, account history, and timing, so the product should avoid presenting "registration ready" as a proxy quality dimension.
 
 ## Brand Personality
 
@@ -29,7 +31,10 @@ Avoid marketing-page composition, decorative cards, oversized hero sections, hid
 - Preserve standard controls and predictable button placement.
 - Prefer public, portable defaults over private deployment assumptions.
 - Keep the UI compact enough for large proxy batches.
+- Treat registration-page reachability as out of scope; show network usefulness instead of signup promises.
 - Protect operational actions with a configurable login password while keeping generated repository links usable by other programs.
+- Keep auto mode backend-driven on self-hosted Python deployments; browser timers must not be the source of truth for scheduled checks.
+- Make serverless deployments degrade clearly when background scheduling is unavailable.
 - On same-origin self-hosted deployments, unauthenticated users should receive only the login page, not the main app shell.
 - Treat `config.local.json`, environment variables, logs, repository data, and checked history as deployment-local state.
 - Remind users that the meaningful path is their own server to proxy IP to target service.
@@ -40,4 +45,4 @@ Prefer complete, low-friction workflows that do not require manual stitching. Ke
 
 ## Release Context
 
-v5 is the public GitHub release line. It replaces the old ChatGPT-specific positioning with a general-purpose proxy checking workflow, adds AI service profiles, dynamic proxy source aggregation, repository filters, refresh-safe detection UI, configurable concurrency, and password-protected operations.
+v6.0 is the public GitHub release line. It builds on the v5 general-purpose proxy checker by adding backend auto mode, per-token scheduled task persistence, automatic repository maintenance, serverless degradation messaging, stronger smoke coverage, and clearer release documentation. v5 replaced the old ChatGPT-specific positioning with a general-purpose proxy checking workflow, AI service profiles, dynamic proxy source aggregation, repository filters, refresh-safe detection UI, configurable concurrency, password-protected operations, and usefulness labels instead of registration-page checks.

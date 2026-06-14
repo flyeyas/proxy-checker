@@ -54,6 +54,10 @@ os.makedirs(REPO_DIR, exist_ok=True)
 CHECKED_DIR = os.path.join(BASE_DIR, 'checked_data')
 os.makedirs(CHECKED_DIR, exist_ok=True)
 
+# Auto mode persistence — per-token schedule and run state
+AUTO_DIR = os.path.join(BASE_DIR, 'auto_data')
+os.makedirs(AUTO_DIR, exist_ok=True)
+
 # === Fetch free proxies from external sources ===
 try:
     from fetch_proxies import fetch_proxies, PROXY_SOURCES
@@ -119,6 +123,8 @@ check_engine = ProxyCheckEngine(
 
 sessions = {}
 sessions_lock = threading.Lock()
+auto_runtime = {}
+auto_lock = threading.Lock()
 TARGET_PROFILE_IDS = {str(item["id"]) for item in TARGET_PROFILE_OPTIONS}
 
 
@@ -133,6 +139,270 @@ def normalize_max_concurrent(value):
     except (TypeError, ValueError):
         concurrent = MAX_CONCURRENT
     return max(1, min(MAX_CONCURRENT_LIMIT, concurrent))
+
+
+def normalize_rounds(value):
+    try:
+        rounds = int(value)
+    except (TypeError, ValueError):
+        rounds = CHECK_ROUNDS
+    return max(1, min(5, rounds))
+
+
+def normalize_interval_hours(value):
+    try:
+        interval_hours = float(value)
+    except (TypeError, ValueError):
+        interval_hours = 6
+    return max(0.01, min(720, interval_hours))
+
+
+def sanitize_token(value):
+    token = str(value or "default").strip()
+    if token.replace("_", "").isalnum():
+        return token
+    return "default"
+
+
+def atomic_write_json(path, data):
+    tmp_path = f"{path}.tmp.{os.getpid()}.{threading.get_ident()}"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+    os.replace(tmp_path, path)
+
+
+def atomic_write_text(path, text):
+    tmp_path = f"{path}.tmp.{os.getpid()}.{threading.get_ident()}"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp_path, path)
+
+
+def read_json_file(path, fallback):
+    if not os.path.isfile(path):
+        return fallback
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if data is not None else fallback
+    except Exception as exc:
+        log.warning("Failed to read json file", extra={"path": path, "error": str(exc)})
+        return fallback
+
+
+def proxy_key(value):
+    return str(value or "").strip().lower()
+
+
+def normalize_proxy_list(items):
+    out = []
+    seen = set()
+    for item in items or []:
+        if isinstance(item, dict):
+            proxy = str(item.get("proxy", "")).strip()
+        else:
+            proxy = str(item or "").strip()
+        if not proxy:
+            continue
+        key = proxy_key(proxy)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(proxy)
+    return out
+
+
+def repo_json_path(token):
+    return os.path.join(REPO_DIR, f"{sanitize_token(token)}.json")
+
+
+def repo_txt_path(token):
+    return os.path.join(REPO_DIR, f"{sanitize_token(token)}.txt")
+
+
+def checked_txt_path(token):
+    return os.path.join(CHECKED_DIR, f"{sanitize_token(token)}.txt")
+
+
+def auto_json_path(token):
+    return os.path.join(AUTO_DIR, f"{sanitize_token(token)}.json")
+
+
+def compact_repo_item(item):
+    if not isinstance(item, dict):
+        item = {"proxy": str(item or "")}
+    proxy = str(item.get("proxy", "")).strip()
+    if not proxy:
+        return None
+    now = int(time.time() * 1000)
+    compact = {"proxy": proxy, "grade": str(item.get("grade") or "?")}
+    for key in ("latency", "ip", "country", "ip_type", "recommended_use", "target_profile", "target_name"):
+        value = item.get(key)
+        if value is not None and value != "":
+            compact[key] = value
+    for key in ("service_reachable", "api_reachable", "cf_bypass"):
+        if item.get(key) is True:
+            compact[key] = True
+    compact["added"] = item.get("added") or now
+    compact["updated"] = item.get("updated") or compact["added"]
+    return compact
+
+
+def compact_repo(repo):
+    out = []
+    seen = set()
+    for item in repo or []:
+        compact = compact_repo_item(item)
+        if not compact:
+            continue
+        key = proxy_key(compact["proxy"])
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(compact)
+    return out
+
+
+def read_repo_data(token):
+    token = sanitize_token(token)
+    json_file = repo_json_path(token)
+    if os.path.isfile(json_file):
+        data = read_json_file(json_file, [])
+        if isinstance(data, list):
+            return compact_repo(data)
+    txt_file = repo_txt_path(token)
+    if not os.path.isfile(txt_file):
+        return []
+    with open(txt_file, "r", encoding="utf-8") as f:
+        return compact_repo({"proxy": line.strip()} for line in f if line.strip())
+
+
+def write_repo_data(token, repo):
+    token = sanitize_token(token)
+    repo = compact_repo(repo)
+    atomic_write_json(repo_json_path(token), repo)
+    atomic_write_text(repo_txt_path(token), "\n".join(item["proxy"] for item in repo))
+    return repo
+
+
+def read_checked_list(token):
+    path = checked_txt_path(token)
+    if not os.path.isfile(path):
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        return [line.strip() for line in f if line.strip()]
+
+
+def write_checked_list(token, proxies):
+    proxies = normalize_proxy_list(proxies)
+    atomic_write_text(checked_txt_path(token), "\n".join(proxies))
+    return proxies
+
+
+def append_checked_list(token, proxies):
+    existing = read_checked_list(token)
+    seen = {proxy_key(proxy) for proxy in existing}
+    merged = list(existing)
+    for proxy in normalize_proxy_list(proxies):
+        key = proxy_key(proxy)
+        if key not in seen:
+            seen.add(key)
+            merged.append(proxy)
+    return write_checked_list(token, merged)
+
+
+def default_auto_config():
+    return {
+        "enabled": False,
+        "schedule_type": "interval",
+        "interval_hours": 6,
+        "daily_time": "03:00",
+        "target_profile": "generic",
+        "rounds": 2,
+        "max_concurrent": MAX_CONCURRENT,
+        "detect_mode": "skip",
+        "repo_update_policy": "stable_only",
+    }
+
+
+def default_auto_state(config=None):
+    config = config or default_auto_config()
+    return {
+        "running": False,
+        "status": "disabled" if not config.get("enabled") else "idle",
+        "session_id": None,
+        "stage": "idle",
+        "started_at": None,
+        "finished_at": None,
+        "last_run_at": None,
+        "next_run_at": None,
+        "last_summary": None,
+        "history": [],
+    }
+
+
+def normalize_daily_time(value):
+    raw = str(value or "03:00").strip()
+    parts = raw.split(":", 1)
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1]) if len(parts) > 1 else 0
+    except (TypeError, ValueError):
+        hour, minute = 3, 0
+    hour = max(0, min(23, hour))
+    minute = max(0, min(59, minute))
+    return f"{hour:02d}:{minute:02d}"
+
+
+def normalize_auto_config(config):
+    config = config if isinstance(config, dict) else {}
+    defaults = default_auto_config()
+    merged = {**defaults, **config}
+    schedule_type = str(merged.get("schedule_type") or "interval")
+    if schedule_type not in ("interval", "daily"):
+        schedule_type = "interval"
+    interval_hours = normalize_interval_hours(merged.get("interval_hours", defaults["interval_hours"]))
+    detect_mode = str(merged.get("detect_mode") or "skip")
+    if detect_mode not in ("skip", "force"):
+        detect_mode = "skip"
+    repo_update_policy = str(merged.get("repo_update_policy") or "stable_only")
+    if repo_update_policy not in ("stable_only", "include_unstable", "archive_all"):
+        repo_update_policy = "stable_only"
+    return {
+        "enabled": bool(merged.get("enabled")),
+        "schedule_type": schedule_type,
+        "interval_hours": interval_hours,
+        "daily_time": normalize_daily_time(merged.get("daily_time")),
+        "target_profile": normalize_target_profile(merged.get("target_profile")),
+        "rounds": normalize_rounds(merged.get("rounds", defaults["rounds"])),
+        "max_concurrent": normalize_max_concurrent(merged.get("max_concurrent", defaults["max_concurrent"])),
+        "detect_mode": detect_mode,
+        "repo_update_policy": repo_update_policy,
+    }
+
+
+def compute_next_run(config, now=None):
+    config = normalize_auto_config(config)
+    if not config.get("enabled"):
+        return None
+    now = time.time() if now is None else float(now)
+    if config["schedule_type"] == "daily":
+        hour, minute = [int(part) for part in config["daily_time"].split(":", 1)]
+        local = time.localtime(now)
+        target = time.mktime((local.tm_year, local.tm_mon, local.tm_mday, hour, minute, 0, local.tm_wday, local.tm_yday, local.tm_isdst))
+        if target <= now:
+            target += 86400
+        return int(target)
+    return int(now + config["interval_hours"] * 3600)
+
+
+def server_time_payload():
+    now = time.time()
+    return {
+        "timestamp": int(now),
+        "text": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now)),
+        "timezone": time.strftime("%Z", time.localtime(now)),
+    }
 
 
 def is_auth_enabled():
@@ -207,6 +477,534 @@ def cleanup_sessions():
                 log.info(f"Cleaned up {len(to_del)} stale sessions, {len(sessions)} remaining")
 
 threading.Thread(target=cleanup_sessions, daemon=True).start()
+
+# ============================================================
+# Auto Mode Scheduler
+# ============================================================
+def list_auto_tokens():
+    tokens = []
+    if not os.path.isdir(AUTO_DIR):
+        return tokens
+    for name in os.listdir(AUTO_DIR):
+        if name.endswith(".json"):
+            tokens.append(sanitize_token(name[:-5]))
+    return tokens
+
+
+def load_auto_record(token):
+    token = sanitize_token(token)
+    data = read_json_file(auto_json_path(token), {})
+    config = normalize_auto_config(data.get("config") if isinstance(data, dict) else {})
+    state = default_auto_state(config)
+    if isinstance(data, dict) and isinstance(data.get("state"), dict):
+        state.update(data["state"])
+    history = state.get("history")
+    state["history"] = history[-20:] if isinstance(history, list) else []
+    if not config.get("enabled"):
+        state["status"] = "disabled"
+        state["next_run_at"] = None
+    elif state.get("next_run_at") is None and not state.get("running"):
+        state["next_run_at"] = compute_next_run(config)
+    return {"config": config, "state": state}
+
+
+def save_auto_record(token, record):
+    token = sanitize_token(token)
+    config = normalize_auto_config(record.get("config", {}))
+    state = record.get("state") if isinstance(record.get("state"), dict) else default_auto_state(config)
+    history = state.get("history")
+    state["history"] = history[-20:] if isinstance(history, list) else []
+    atomic_write_json(auto_json_path(token), {"config": config, "state": state})
+    return {"config": config, "state": state}
+
+
+def append_auto_history(state, summary):
+    history = state.get("history")
+    if not isinstance(history, list):
+        history = []
+    history.append(summary)
+    state["history"] = history[-20:]
+    state["last_summary"] = summary
+
+
+def runtime_counts(results):
+    valid = sum(1 for r in results if r.get("valid"))
+    unstable = sum(1 for r in results if r.get("unstable"))
+    invalid = sum(1 for r in results if not r.get("valid") and not r.get("unstable"))
+    return valid, unstable, invalid
+
+
+def get_auto_status(token):
+    token = sanitize_token(token)
+    with auto_lock:
+        record = load_auto_record(token)
+        runtime = auto_runtime.get(token)
+        if runtime:
+            results = runtime.get("results", [])
+            valid, unstable, invalid = runtime_counts(results)
+            record["state"].update({
+                "running": True,
+                "status": runtime.get("status", "running"),
+                "session_id": runtime.get("run_id"),
+                "stage": runtime.get("stage", "running"),
+                "started_at": runtime.get("started_at"),
+                "total": runtime.get("total", 0),
+                "done": runtime.get("done", 0),
+                "valid_count": valid,
+                "unstable_count": unstable,
+                "invalid_count": invalid,
+                "source_count": runtime.get("source_count", 0),
+                "repo_count": runtime.get("repo_count", 0),
+                "skipped": runtime.get("skipped", 0),
+                "error": runtime.get("error"),
+            })
+        record["server_time"] = server_time_payload()
+        record["auto_mode"] = True
+        return record
+
+
+def is_auto_running(token):
+    token = sanitize_token(token)
+    with auto_lock:
+        runtime = auto_runtime.get(token)
+        return bool(runtime and not runtime.get("finished"))
+
+
+def update_auto_runtime(token, **fields):
+    token = sanitize_token(token)
+    with auto_lock:
+        runtime = auto_runtime.get(token)
+        if runtime:
+            runtime.update(fields)
+        record = load_auto_record(token)
+        state = record["state"]
+        if "stage" in fields:
+            state["stage"] = fields["stage"]
+        if "status" in fields:
+            state["status"] = fields["status"]
+        for key in ("total", "done", "source_count", "repo_count", "skipped", "error"):
+            if key in fields:
+                state[key] = fields[key]
+        save_auto_record(token, record)
+
+
+def result_repo_key(result):
+    return proxy_key(result.get("original") or result.get("proxy"))
+
+
+def result_to_repo_item(result, existing=None):
+    now = int(time.time() * 1000)
+    existing = existing or {}
+    country = result.get("country")
+    checks_detail = result.get("checks_detail")
+    if not country and isinstance(checks_detail, dict):
+        ip_info = checks_detail.get("ip_info")
+        if isinstance(ip_info, dict):
+            country = ip_info.get("country")
+    item = {
+        "proxy": result.get("proxy") or result.get("original"),
+        "grade": result.get("grade") or "F",
+        "latency": result.get("latency"),
+        "ip": result.get("ip"),
+        "country": str(country).upper() if country else None,
+        "ip_type": result.get("ip_type"),
+        "service_reachable": result.get("service_reachable") is True,
+        "api_reachable": result.get("api_reachable") is True,
+        "cf_bypass": result.get("cf_bypass") is True,
+        "recommended_use": result.get("recommended_use"),
+        "target_profile": result.get("target_profile"),
+        "target_name": result.get("target_name"),
+        "added": existing.get("added") or now,
+        "updated": now,
+    }
+    return compact_repo_item(item)
+
+
+def result_matches_policy(result, policy):
+    grade = str(result.get("grade") or "F")
+    if policy == "archive_all":
+        return True
+    if policy == "include_unstable":
+        return grade in ("A", "B", "C", "D") or result.get("valid") or result.get("unstable")
+    return grade in ("A", "B", "C") or result.get("valid")
+
+
+def merge_repo_results(token, repo, results, checked_inputs, policy):
+    policy = policy if policy in ("stable_only", "include_unstable", "archive_all") else "stable_only"
+    participating = {proxy_key(proxy) for proxy in checked_inputs}
+    result_by_key = {}
+    for result in results:
+        for value in (result.get("original"), result.get("proxy")):
+            key = proxy_key(value)
+            if key:
+                result_by_key[key] = result
+
+    existing_by_key = {}
+    for item in compact_repo(repo):
+        existing_by_key[proxy_key(item["proxy"])] = item
+
+    removed = 0
+    next_repo = []
+    used_old_keys = set()
+    for item in compact_repo(repo):
+        key = proxy_key(item["proxy"])
+        result = result_by_key.get(key)
+        if policy != "archive_all" and key in participating and result and not result_matches_policy(result, policy):
+            removed += 1
+            used_old_keys.add(key)
+            continue
+        next_repo.append(item)
+
+    index_by_key = {proxy_key(item["proxy"]): i for i, item in enumerate(next_repo)}
+    added = 0
+    updated = 0
+    for result in results:
+        if not result_matches_policy(result, policy):
+            continue
+        candidate_keys = [proxy_key(result.get("original")), proxy_key(result.get("proxy"))]
+        existing = None
+        existing_index = None
+        for key in candidate_keys:
+            if key in index_by_key:
+                existing_index = index_by_key[key]
+                existing = next_repo[existing_index]
+                break
+            if key in existing_by_key:
+                existing = existing_by_key[key]
+        item = result_to_repo_item(result, existing)
+        if not item:
+            continue
+        if existing_index is None:
+            next_repo.append(item)
+            index_by_key[proxy_key(item["proxy"])] = len(next_repo) - 1
+            added += 1
+        else:
+            next_repo[existing_index] = item
+            index_by_key[proxy_key(item["proxy"])] = existing_index
+            updated += 1
+
+    saved = write_repo_data(token, next_repo)
+    return {
+        "repo_count": len(saved),
+        "repo_added": added,
+        "repo_updated": updated,
+        "repo_removed": removed,
+    }
+
+
+def build_auto_summary(runtime, status, error=None, repo_summary=None):
+    results = runtime.get("results", [])
+    valid, unstable, invalid = runtime_counts(results)
+    started_at = runtime.get("started_at") or time.time()
+    finished_at = time.time()
+    summary = {
+        "status": status,
+        "reason": runtime.get("reason", "schedule"),
+        "started_at": int(started_at),
+        "finished_at": int(finished_at),
+        "duration_seconds": max(0, int(finished_at - started_at)),
+        "target_profile": runtime.get("target_profile", "generic"),
+        "rounds": runtime.get("rounds", CHECK_ROUNDS),
+        "max_concurrent": runtime.get("max_concurrent", MAX_CONCURRENT),
+        "detect_mode": runtime.get("detect_mode", "skip"),
+        "repo_update_policy": runtime.get("repo_update_policy", "stable_only"),
+        "source_count": runtime.get("source_count", 0),
+        "repo_input_count": runtime.get("repo_count", 0),
+        "input_count": runtime.get("input_count", 0),
+        "skipped": runtime.get("skipped", 0),
+        "total": runtime.get("total", 0),
+        "done": runtime.get("done", 0),
+        "valid_count": valid,
+        "unstable_count": unstable,
+        "invalid_count": invalid,
+    }
+    if error:
+        summary["error"] = str(error)[:300]
+    if repo_summary:
+        summary.update(repo_summary)
+    return summary
+
+
+def finalize_auto_run(token, runtime, status, error=None, repo_summary=None):
+    token = sanitize_token(token)
+    summary = build_auto_summary(runtime, status, error, repo_summary)
+    with auto_lock:
+        record = load_auto_record(token)
+        config = normalize_auto_config(record.get("config", {}))
+        state = record["state"]
+        state.update({
+            "running": False,
+            "status": status,
+            "session_id": None,
+            "stage": status,
+            "finished_at": summary["finished_at"],
+            "last_run_at": summary["finished_at"],
+            "next_run_at": compute_next_run(config) if config.get("enabled") else None,
+            "error": summary.get("error"),
+        })
+        append_auto_history(state, summary)
+        save_auto_record(token, {"config": config, "state": state})
+        stored = auto_runtime.get(token)
+        if stored and stored.get("run_id") == runtime.get("run_id"):
+            stored["finished"] = True
+            del auto_runtime[token]
+    log.info("Auto run finished", extra={"token": token, "status": status, "summary": summary})
+
+
+def execute_auto_run(token, config, run_id, reason):
+    token = sanitize_token(token)
+    runtime = None
+    try:
+        with auto_lock:
+            runtime = auto_runtime[token]
+        update_auto_runtime(token, stage="fetching", status="running")
+        if not FETCH_PROXIES_AVAILABLE:
+            raise RuntimeError("fetch_proxies 模块不可用")
+        fetched, _source_name, err = fetch_proxies("all", 50000)
+        if err:
+            raise RuntimeError(err)
+        source_proxies = normalize_proxy_list(fetched)
+
+        update_auto_runtime(token, stage="loading_repo", source_count=len(source_proxies))
+        repo = read_repo_data(token)
+        repo_proxies = normalize_proxy_list(item.get("proxy") for item in repo)
+        combined = normalize_proxy_list(source_proxies + repo_proxies)
+
+        checked = read_checked_list(token)
+        checked_keys = {proxy_key(proxy) for proxy in checked}
+        if config["detect_mode"] == "skip":
+            to_check = [proxy for proxy in combined if proxy_key(proxy) not in checked_keys]
+        else:
+            to_check = combined
+        skipped = len(combined) - len(to_check)
+        with auto_lock:
+            runtime.update({
+                "target_profile": config["target_profile"],
+                "rounds": config["rounds"],
+                "max_concurrent": config["max_concurrent"],
+                "detect_mode": config["detect_mode"],
+                "repo_update_policy": config["repo_update_policy"],
+                "repo_count": len(repo),
+                "input_count": len(combined),
+                "total": len(to_check),
+                "skipped": skipped,
+            })
+        update_auto_runtime(token, stage="detecting", repo_count=len(repo), total=len(to_check), skipped=skipped)
+
+        if to_check:
+            async def run_async():
+                await check_engine.check_many_async(
+                    proxies=to_check,
+                    stop_event=runtime["stop"],
+                    rounds=config["rounds"],
+                    max_concurrent=config["max_concurrent"],
+                    on_result=lambda result: publish_auto_result(token, result),
+                    target_profile=config["target_profile"],
+                )
+
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(run_async())
+            finally:
+                loop.close()
+
+        if runtime["stop"].is_set():
+            finalize_auto_run(token, runtime, "stopped")
+            return
+
+        update_auto_runtime(token, stage="updating_repo")
+        detected = [result.get("original") or result.get("proxy") for result in runtime.get("results", [])]
+        append_checked_list(token, detected)
+        repo_summary = merge_repo_results(
+            token=token,
+            repo=repo,
+            results=runtime.get("results", []),
+            checked_inputs=to_check,
+            policy=config["repo_update_policy"],
+        )
+        finalize_auto_run(token, runtime, "completed", repo_summary=repo_summary)
+    except Exception as exc:
+        if runtime is None:
+            runtime = {
+                "run_id": run_id,
+                "reason": reason,
+                "started_at": time.time(),
+                "results": [],
+                "done": 0,
+                "total": 0,
+                "target_profile": config.get("target_profile", "generic"),
+                "rounds": config.get("rounds", CHECK_ROUNDS),
+                "max_concurrent": config.get("max_concurrent", MAX_CONCURRENT),
+                "detect_mode": config.get("detect_mode", "skip"),
+                "repo_update_policy": config.get("repo_update_policy", "stable_only"),
+            }
+        log.error("Auto run failed", extra={"token": token, "error": str(exc)}, exc_info=True)
+        finalize_auto_run(token, runtime, "failed", error=exc)
+
+
+def publish_auto_result(token, result):
+    if not result:
+        return
+    token = sanitize_token(token)
+    with auto_lock:
+        runtime = auto_runtime.get(token)
+        if not runtime:
+            return
+        runtime["results"].append(result)
+        runtime["done"] = runtime.get("done", 0) + 1
+
+
+def start_auto_run(token, reason="schedule"):
+    token = sanitize_token(token)
+    with auto_lock:
+        if token in auto_runtime:
+            return False, "自动任务正在执行"
+        record = load_auto_record(token)
+        config = normalize_auto_config(record.get("config", {}))
+        if reason == "schedule" and not config.get("enabled"):
+            return False, "自动模式未启用"
+        run_id = f"auto_{int(time.time())}_{id(config)}"
+        runtime = {
+            "run_id": run_id,
+            "reason": reason,
+            "stop": threading.Event(),
+            "status": "running",
+            "stage": "starting",
+            "started_at": time.time(),
+            "results": [],
+            "done": 0,
+            "total": 0,
+            "finished": False,
+            "target_profile": config["target_profile"],
+            "rounds": config["rounds"],
+            "max_concurrent": config["max_concurrent"],
+            "detect_mode": config["detect_mode"],
+            "repo_update_policy": config["repo_update_policy"],
+        }
+        auto_runtime[token] = runtime
+        state = record["state"]
+        state.update({
+            "running": True,
+            "status": "running",
+            "session_id": run_id,
+            "stage": "starting",
+            "started_at": int(runtime["started_at"]),
+            "finished_at": None,
+            "error": None,
+        })
+        save_auto_record(token, {"config": config, "state": state})
+
+    thread = threading.Thread(target=execute_auto_run, args=(token, config, run_id, reason), daemon=True)
+    with auto_lock:
+        if token in auto_runtime:
+            auto_runtime[token]["thread"] = thread
+    thread.start()
+    return True, run_id
+
+
+def stop_auto_run(token):
+    token = sanitize_token(token)
+    with auto_lock:
+        runtime = auto_runtime.get(token)
+        if not runtime:
+            return False
+        runtime["status"] = "stopping"
+        runtime["stage"] = "stopping"
+        runtime["stop"].set()
+        record = load_auto_record(token)
+        record["state"]["status"] = "stopping"
+        record["state"]["stage"] = "stopping"
+        save_auto_record(token, record)
+    return True
+
+
+def save_auto_config(token, config):
+    token = sanitize_token(token)
+    with auto_lock:
+        record = load_auto_record(token)
+        normalized = normalize_auto_config(config)
+        state = record["state"]
+        if normalized.get("enabled"):
+            state["status"] = "running" if token in auto_runtime else "idle"
+            if token not in auto_runtime:
+                state["next_run_at"] = compute_next_run(normalized)
+        else:
+            state["status"] = "disabled"
+            state["next_run_at"] = None
+        state["running"] = token in auto_runtime
+        state["stage"] = "running" if token in auto_runtime else state["status"]
+        return save_auto_record(token, {"config": normalized, "state": state})
+
+
+def mark_interrupted_auto_runs():
+    now = int(time.time())
+    for token in list_auto_tokens():
+        with auto_lock:
+            record = load_auto_record(token)
+            config = normalize_auto_config(record.get("config", {}))
+            state = record["state"]
+            if not state.get("running"):
+                continue
+            summary = {
+                "status": "interrupted",
+                "reason": "service_restart",
+                "started_at": state.get("started_at"),
+                "finished_at": now,
+                "duration_seconds": 0,
+                "target_profile": config.get("target_profile", "generic"),
+                "rounds": config.get("rounds", CHECK_ROUNDS),
+                "max_concurrent": config.get("max_concurrent", MAX_CONCURRENT),
+                "detect_mode": config.get("detect_mode", "skip"),
+                "repo_update_policy": config.get("repo_update_policy", "stable_only"),
+                "error": "服务重启，上一轮自动任务已中断",
+            }
+            state.update({
+                "running": False,
+                "status": "interrupted",
+                "stage": "interrupted",
+                "session_id": None,
+                "finished_at": now,
+                "next_run_at": now if config.get("enabled") else None,
+                "error": summary["error"],
+            })
+            append_auto_history(state, summary)
+            save_auto_record(token, {"config": config, "state": state})
+
+
+def scheduler_loop():
+    while True:
+        due_tokens = []
+        now = time.time()
+        for token in list_auto_tokens():
+            with auto_lock:
+                record = load_auto_record(token)
+                config = normalize_auto_config(record.get("config", {}))
+                state = record["state"]
+                if not config.get("enabled") or token in auto_runtime:
+                    continue
+                next_run_at = state.get("next_run_at")
+                if next_run_at is None:
+                    state["next_run_at"] = compute_next_run(config, now)
+                    save_auto_record(token, {"config": config, "state": state})
+                    continue
+                try:
+                    due = float(next_run_at) <= now
+                except (TypeError, ValueError):
+                    due = True
+                if due:
+                    due_tokens.append(token)
+        for token in due_tokens:
+            started, message = start_auto_run(token, "schedule")
+            if started:
+                log.info("Scheduled auto run started", extra={"token": token})
+            else:
+                log.warning("Scheduled auto run skipped", extra={"token": token, "message": message})
+        time.sleep(30)
+
+
+def start_auto_scheduler():
+    mark_interrupted_auto_runs()
+    threading.Thread(target=scheduler_loop, daemon=True).start()
 
 # ============================================================
 # Deep Check (optional, requires nodriver + Chrome)
@@ -465,6 +1263,8 @@ class Handler(SimpleHTTPRequestHandler):
                     "max_concurrent_limit": MAX_CONCURRENT_LIMIT,
                     "auth_required": is_auth_enabled(),
                     "authenticated": is_request_authenticated(self.headers),
+                    "auto_mode": True,
+                    "auto_mode_hint": "后台自动模式仅在自托管 Python 服务中可用",
                     "proxy_sources": [{"id": s["id"], "name": s["name"]} for s in (PROXY_SOURCES if FETCH_PROXIES_AVAILABLE else [])],
                 })
 
@@ -473,10 +1273,13 @@ class Handler(SimpleHTTPRequestHandler):
 
             elif self.path == "/api/start":
                 proxies = body.get("proxies", [])
-                rounds = body.get("rounds", CHECK_ROUNDS)
-                rounds = max(1, min(5, int(rounds)))  # clamp 1-5
+                rounds = normalize_rounds(body.get("rounds", CHECK_ROUNDS))
                 target_profile = normalize_target_profile(body.get("target_profile", "generic"))
                 max_concurrent = normalize_max_concurrent(body.get("max_concurrent", MAX_CONCURRENT))
+                token = sanitize_token(body.get("token", ""))
+                if body.get("token") and is_auto_running(token):
+                    self._json(200, {"error": "自动任务正在执行，请先停止自动任务", "auto_running": True})
+                    return
                 sid = str(time.time()) + str(id(proxies))
                 with sessions_lock:
                     sessions[sid] = {
@@ -509,8 +1312,40 @@ class Handler(SimpleHTTPRequestHandler):
                         "unstable_count": sum(1 for r in all_r if r.get("unstable")),
                         "invalid_count": sum(1 for r in all_r if not r.get("valid") and not r.get("unstable")),
                         "cf_bypass_count": sum(1 for r in all_r if r.get("cf_bypass")),
-                        "registration_count": sum(1 for r in all_r if r.get("registration_ready")),
                     })
+
+            elif self.path == "/api/auto/get":
+                token = sanitize_token(body.get("token", "default"))
+                self._json(200, get_auto_status(token))
+
+            elif self.path == "/api/auto/save":
+                token = sanitize_token(body.get("token", "default"))
+                record = save_auto_config(token, body.get("config", {}))
+                response = get_auto_status(token)
+                response["saved"] = True
+                response["config"] = record["config"]
+                response["state"] = record["state"]
+                self._json(200, response)
+
+            elif self.path == "/api/auto/run-now":
+                token = sanitize_token(body.get("token", "default"))
+                started, message = start_auto_run(token, "manual")
+                response = get_auto_status(token)
+                response["started"] = started
+                if not started:
+                    response["error"] = message
+                self._json(200, response)
+
+            elif self.path == "/api/auto/stop":
+                token = sanitize_token(body.get("token", "default"))
+                stopped = stop_auto_run(token)
+                response = get_auto_status(token)
+                response["stopped"] = stopped
+                self._json(200, response)
+
+            elif self.path == "/api/auto/status":
+                token = sanitize_token(body.get("token", "default"))
+                self._json(200, get_auto_status(token))
 
             elif self.path == "/api/stop":
                 sid = body.get("session_id", "")
@@ -654,10 +1489,12 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
 
 if __name__ == "__main__":
+    start_auto_scheduler()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     log.info(f"Proxy Checker running at http://0.0.0.0:{PORT}")
     log.info(f"Deep check (nodriver): {'available' if NODRIVER_AVAILABLE else 'not installed'}")
     log.info(f"Concurrency: {MAX_CONCURRENT} | Rounds: {CHECK_ROUNDS}")
+    log.info("Auto mode scheduler started")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
