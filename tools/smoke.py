@@ -146,6 +146,8 @@ def main() -> None:
         "function recheckRepo()",
         "function openAutoSettings()",
         "function renderAutoStatus(",
+        "function openAppSettings()",
+        "function openRunLogs()",
         "target_profile",
     ):
         if expected not in app_js:
@@ -156,8 +158,24 @@ def main() -> None:
         raise AssertionError("index.html missing auto mode button")
     if 'id="autoStatusBadge"' not in index_html:
         raise AssertionError("index.html missing auto status badge")
+    if 'openAppSettings()' not in index_html:
+        raise AssertionError("index.html missing settings button")
+    if 'openRunLogs()' not in index_html:
+        raise AssertionError("index.html missing run logs button")
     if 'id="authOverlay"' not in index_html:
         raise AssertionError("index.html missing auth overlay")
+
+    settings = post_json(args.base_url, "/api/settings/get", {}, token=token)
+    settings_data = settings.get("settings") or {}
+    for key in ("check_rounds", "max_check_rounds", "max_concurrent", "max_concurrent_limit", "timezone", "timezone_options"):
+        if key not in settings_data:
+            raise AssertionError(f"settings missing {key}: {settings}")
+    if int(settings_data.get("max_check_rounds", 0)) != 3:
+        raise AssertionError(f"max_check_rounds should be 3: {settings_data}")
+
+    logs = post_json(args.base_url, "/api/logs/list", {"token": "smoke_auto"}, token=token)
+    if "logs" not in logs:
+        raise AssertionError(f"logs response missing logs: {logs}")
 
     auto_status = post_json(args.base_url, "/api/auto/status", {"token": "smoke_auto"}, token=token)
     if capabilities.get("auto_mode"):

@@ -34,6 +34,8 @@ Avoid marketing-page composition, decorative cards, oversized hero sections, hid
 - Treat registration-page reachability as out of scope; show network usefulness instead of signup promises.
 - Protect operational actions with a configurable login password while keeping generated repository links usable by other programs.
 - Keep auto mode backend-driven on self-hosted Python deployments; browser timers must not be the source of truth for scheduled checks.
+- Show scheduled times in one explicit plan timezone, never by mixing server-local text with browser-local timestamp formatting.
+- Keep run history visible through a product-level log view, not only process logs.
 - Make serverless deployments degrade clearly when background scheduling is unavailable.
 - On same-origin self-hosted deployments, unauthenticated users should receive only the login page, not the main app shell.
 - Treat `config.local.json`, environment variables, logs, repository data, and checked history as deployment-local state.
@@ -45,4 +47,4 @@ Prefer complete, low-friction workflows that do not require manual stitching. Ke
 
 ## Release Context
 
-v6.0 is the public GitHub release line. It builds on the v5 general-purpose proxy checker by adding backend auto mode, per-token scheduled task persistence, automatic repository maintenance, serverless degradation messaging, stronger smoke coverage, and clearer release documentation. v5 replaced the old ChatGPT-specific positioning with a general-purpose proxy checking workflow, AI service profiles, dynamic proxy source aggregation, repository filters, refresh-safe detection UI, configurable concurrency, password-protected operations, and usefulness labels instead of registration-page checks.
+v6.0 is the public GitHub release line. It builds on the v5 general-purpose proxy checker by adding backend auto mode, per-token scheduled task persistence, automatic repository maintenance, run logs, global settings, timezone-aware scheduling, serverless degradation messaging, stronger smoke coverage, and clearer release documentation. v5 replaced the old ChatGPT-specific positioning with a general-purpose proxy checking workflow, AI service profiles, dynamic proxy source aggregation, repository filters, refresh-safe detection UI, configurable concurrency, password-protected operations, and usefulness labels instead of registration-page checks.
