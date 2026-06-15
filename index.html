@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>通用代理检测器 v6.1</title>
+<title>通用代理检测器 v6.2</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f0f23;color:#e0e0e0;min-height:100vh}
@@ -118,6 +118,8 @@ textarea::placeholder{color:#555}
 .grade-menu-item{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;transition:background .15s;font-size:13px;color:#ccc;white-space:nowrap}
 .grade-menu-item:hover{background:rgba(124,92,252,.15);color:#fff}
 .grade-menu-item .grade-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.menu-danger{color:#fca5a5}
+.menu-danger:hover{background:rgba(239,68,68,.12)!important;color:#fff}
 .resize-handle{position:relative}
 .resize-handle::after{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:40px;height:6px;cursor:ns-resize;border-radius:3px 3px 0 0;background:rgba(255,255,255,.08);transition:background .2s}
 .resize-handle::after:hover{background:rgba(124,92,252,.4)}
@@ -130,11 +132,12 @@ textarea::-webkit-scrollbar-track{background:rgba(255,255,255,.03);border-radius
 textarea::-webkit-scrollbar-thumb{background:rgba(124,92,252,.3);border-radius:3px}
 textarea::-webkit-scrollbar-thumb:hover{background:rgba(124,92,252,.5)}
 .proxy-count-badge{background:rgba(124,92,252,.15);color:#a78bfa;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap}
-.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:1000;justify-content:center;align-items:center;animation:modalFadeIn .25s ease}
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:1000;justify-content:center;align-items:center;animation:modalFadeIn .14s ease}
 .modal-overlay.show{display:flex}
 @keyframes modalFadeIn{from{opacity:0}to{opacity:1}}
-.modal-box{background:linear-gradient(160deg,#1e1e3f 0%,#16162e 100%);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:36px 32px;max-width:420px;width:90%;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.6),0 0 0 1px rgba(124,92,252,.08);animation:modalBoxIn .3s ease}
+.modal-box{background:linear-gradient(160deg,#1e1e3f 0%,#16162e 100%);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:36px 32px;max-width:420px;width:90%;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.6),0 0 0 1px rgba(124,92,252,.08);animation:modalBoxIn .16s ease}
 @keyframes modalBoxIn{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media (prefers-reduced-motion:reduce){.modal-overlay,.modal-box{animation:none!important;transition:none!important}}
 .modal-icon{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px;background:linear-gradient(135deg,rgba(234,179,8,.15),rgba(234,179,8,.05));border:1px solid rgba(234,179,8,.2)}
 .modal-box h3{font-size:1.15rem;color:#fff;margin-bottom:10px;font-weight:700}
 .modal-box p{font-size:.85rem;color:#888;line-height:1.7;margin-bottom:24px}
@@ -204,7 +207,7 @@ textarea::-webkit-scrollbar-thumb:hover{background:rgba(124,92,252,.5)}
 <!-- Header -->
 <div class="header">
 <div class="header-title">
-<h1>&#128269; 通用代理检测器 v6.1</h1>
+<h1>&#128269; 通用代理检测器 v6.2</h1>
 <p>常规连通性 &middot; AI 服务专项检测 &middot; IP类型识别 &middot; 仓库同步</p>
 </div>
 </div>
@@ -348,10 +351,15 @@ textarea::-webkit-scrollbar-thumb:hover{background:rgba(124,92,252,.5)}
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:6px;flex-wrap:wrap">
 <div class="filter-bar" id="repoFilters" style="margin-bottom:0">
 <button class="fbtn active" data-f="all">🔎 全部</button>
-<button class="fbtn" data-f="grade_a">🏅 等级A</button>
-<button class="fbtn" data-f="grade_b">🏅 等级B</button>
-<button class="fbtn" data-f="grade_c">🏅 等级C</button>
-<button class="fbtn" data-f="grade_d">🏅 等级D</button>
+<div class="grade-dropdown" id="repoGradeDropdown">
+<button class="fbtn" id="repoGradeFilterBtn" data-f="grade_all" onclick="toggleRepoGradeMenu()">🏅 等级筛选 ▾</button>
+<div class="grade-menu" id="repoGradeMenu">
+<div class="grade-menu-item" onclick="setRepoGradeFilter('grade_a','等级A')"><span class="grade-dot" style="background:#22c55e"></span>等级 A</div>
+<div class="grade-menu-item" onclick="setRepoGradeFilter('grade_b','等级B')"><span class="grade-dot" style="background:#10b981"></span>等级 B</div>
+<div class="grade-menu-item" onclick="setRepoGradeFilter('grade_c','等级C')"><span class="grade-dot" style="background:#eab308"></span>等级 C</div>
+<div class="grade-menu-item" onclick="setRepoGradeFilter('grade_d','等级D')"><span class="grade-dot" style="background:#f97316"></span>等级 D</div>
+</div>
+</div>
 <button class="fbtn" data-f="service">🌐 服务可达</button>
 <button class="fbtn" data-f="api">🔌 API域名可达</button>
 <button class="fbtn" data-f="cf">🛡️ 网页CF未拦截</button>
@@ -360,20 +368,32 @@ textarea::-webkit-scrollbar-thumb:hover{background:rgba(124,92,252,.5)}
 <button class="fbtn" data-f="country">🌍 有国家</button>
 </div>
 <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;color:#ef4444;border-color:rgba(239,68,68,.3)" onclick="clearRepo()">&#128465; 清空</button>
+<div class="fetch-dropdown" id="repoClearDropdown">
+<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;color:#ef4444;border-color:rgba(239,68,68,.3)" onclick="toggleRepoClear()">&#128465; 清空 &#9660;</button>
+<div class="fetch-menu" id="repoClearMenu">
+<div class="fetch-menu-item menu-danger" onclick="clearRepoByGrade('A')">🏅 清空等级A</div>
+<div class="fetch-menu-item menu-danger" onclick="clearRepoByGrade('B')">🏅 清空等级B</div>
+<div class="fetch-menu-item menu-danger" onclick="clearRepoByGrade('C')">🏅 清空等级C</div>
+<div class="fetch-menu-item menu-danger" onclick="clearRepoByGrade('D')">🏅 清空等级D</div>
+<div class="fetch-menu-item menu-danger" onclick="clearRepoByGrade('ALL')">🧹 清空全部</div>
+</div>
+</div>
 <div class="fetch-dropdown" id="repoIODropdown">
 <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="toggleRepoIO()">&#128228; 导入/导出 &#9660;</button>
 <div class="fetch-menu" id="repoIOMenu">
 <div class="fetch-menu-item" onclick="document.getElementById('repoFileInput').click()">&#128228; 导入TXT</div>
-<div class="fetch-menu-item" onclick="exportRepo()">&#128229; 导出全部</div>
+<div class="fetch-menu-item" onclick="document.getElementById('repoJsonFileInput').click()">📥 导入JSON</div>
+<div class="fetch-menu-item" onclick="exportRepo()">&#128229; 导出TXT</div>
+<div class="fetch-menu-item" onclick="exportRepoJson()">📤 导出JSON</div>
 <div class="fetch-menu-item" onclick="copyRepo()">&#128203; 复制全部</div>
 </div>
 </div>
 <input type="file" id="repoFileInput" accept=".txt,.csv" style="display:none" onchange="importRepoTxt(this)">
+<input type="file" id="repoJsonFileInput" accept=".json,application/json" style="display:none" onchange="importRepoJson(this)">
 <div class="fetch-dropdown" id="repoCloudDropdown">
 <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;color:#60a5fa;border-color:rgba(96,165,250,.3)" onclick="toggleRepoCloud()">&#9729; 云端 &#9660;</button>
 <div class="fetch-menu" id="repoCloudMenu">
-<div class="fetch-menu-item" onclick="restoreRepoFromCloud()">&#128260; 恢复云端数据</div>
+<div class="fetch-menu-item" onclick="restoreRepoFromCloud()">&#128260; 恢复云端数据 <span class="fetch-count" id="repoCloudCount">--</span></div>
 <div class="fetch-menu-item" onclick="saveRepoToCloud()">&#128190; 保存到云端</div>
 </div>
 </div>

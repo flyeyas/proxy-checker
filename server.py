@@ -385,6 +385,66 @@ def write_repo_data(token, repo):
     return repo
 
 
+def merge_repo_data(existing, incoming):
+    merged = compact_repo(existing)
+    index_by_key = {proxy_key(item["proxy"]): i for i, item in enumerate(merged)}
+    for item in compact_repo(incoming):
+        key = proxy_key(item["proxy"])
+        if not key:
+            continue
+        index = index_by_key.get(key)
+        if index is None:
+            index_by_key[key] = len(merged)
+            merged.append(item)
+        else:
+            previous = merged[index]
+            item["added"] = previous.get("added") or item.get("added")
+            merged[index] = {**previous, **item}
+    return compact_repo(merged)
+
+
+def save_repo_payload(token, incoming, mode="merge", base_count=None):
+    token = sanitize_token(token)
+    mode = mode if mode in ("merge", "replace") else "merge"
+    incoming_repo = compact_repo(incoming)
+    existing_repo = read_repo_data(token)
+    current_count = len(existing_repo)
+    try:
+        expected_count = int(base_count)
+    except (TypeError, ValueError):
+        expected_count = None
+
+    if mode == "replace":
+        if expected_count is None and current_count > len(incoming_repo):
+            return None, {
+                "ok": False,
+                "stale_repo": True,
+                "current_count": current_count,
+                "submitted_count": len(incoming_repo),
+                "error": "云端仓库已有更多代理，请先刷新云端仓库后再删除或覆盖",
+            }
+        if expected_count is not None and expected_count != current_count:
+            return None, {
+                "ok": False,
+                "stale_repo": True,
+                "current_count": current_count,
+                "submitted_count": len(incoming_repo),
+                "base_count": expected_count,
+                "error": "云端仓库已被更新，请先刷新云端仓库后再删除或覆盖",
+            }
+        saved = write_repo_data(token, incoming_repo)
+    else:
+        saved = write_repo_data(token, merge_repo_data(existing_repo, incoming_repo))
+
+    return saved, {
+        "ok": True,
+        "mode": mode,
+        "count": len(saved),
+        "current_count": current_count,
+        "submitted_count": len(incoming_repo),
+    }
+
+
 def read_checked_list(token):
     path = checked_txt_path(token)
     if not os.path.isfile(path):
@@ -1808,26 +1868,28 @@ class Handler(SimpleHTTPRequestHandler):
                 token = body.get("token", "default")
                 if not token.replace("_","").isalnum():
                     token = "default"
+                mode = body.get("mode", "merge")
+                base_count = body.get("base_count", None)
 
                 if repo_data is not None:
-                    # Full JSON data — save as .json
-                    json_file = os.path.join(REPO_DIR, f"{token}.json")
-                    with open(json_file, "w") as f:
-                        json.dump(repo_data, f, ensure_ascii=False)
-                    # Also save txt for backwards compat
-                    txt_file = os.path.join(REPO_DIR, f"{token}.txt")
-                    proxy_list = [p.get("proxy","") if isinstance(p,dict) else str(p) for p in repo_data]
-                    with open(txt_file, "w") as f:
-                        f.write("\n".join(proxy_list))
-                    log.info(f"Repo saved (JSON): token={token}, proxies={len(repo_data)}")
-                    self._json(200, {"ok": True, "url": f"/api/repo/{token}.json", "count": len(repo_data)})
+                    saved, response = save_repo_payload(token, repo_data, mode, base_count)
+                    if saved is None:
+                        log.warning("Repo save rejected", extra={"token": token, "response": response})
+                        self._json(200, response)
+                        return
+                    response["url"] = f"/api/repo/{token}.json"
+                    log.info("Repo saved (JSON)", extra={"token": token, "mode": response["mode"], "count": response["count"], "submitted_count": response["submitted_count"]})
+                    self._json(200, response)
                 else:
-                    # Legacy txt-only
-                    repo_file = os.path.join(REPO_DIR, f"{token}.txt")
-                    with open(repo_file, "w") as f:
-                        f.write("\n".join(proxies))
-                    log.info(f"Repo saved (txt): token={token}, proxies={len(proxies)}")
-                    self._json(200, {"ok": True, "url": f"/api/repo/{token}.txt", "count": len(proxies)})
+                    legacy_repo = [{"proxy": proxy} for proxy in proxies]
+                    saved, response = save_repo_payload(token, legacy_repo, mode, base_count)
+                    if saved is None:
+                        log.warning("Repo save rejected", extra={"token": token, "response": response})
+                        self._json(200, response)
+                        return
+                    response["url"] = f"/api/repo/{token}.txt"
+                    log.info("Repo saved (txt)", extra={"token": token, "mode": response["mode"], "count": response["count"], "submitted_count": response["submitted_count"]})
+                    self._json(200, response)
 
             elif self.path == "/api/fetch-proxies":
                 # Fetch proxies from external sources

@@ -32,6 +32,8 @@ var autoSessionId='';
 var autoRunResultKeys={};
 var autoStopRequestedSession='';
 var autoStopRepoPromptSession='';
+var autoRepoRefreshSession='';
+var autoLastRunning=false;
 var RESULT_RENDER_BATCH=400;
 var resultRenderLimits={valid:RESULT_RENDER_BATCH,invalid:RESULT_RENDER_BATCH,repo:RESULT_RENDER_BATCH};
 var resultsSaveTimer=null;
@@ -979,6 +981,11 @@ document.querySelectorAll('.fbtn').forEach(function(btn){
     btn.classList.add('active');
     var f=btn.dataset.f;
     if(bar.id==='repoFilters'){
+      var gradeBtn=document.getElementById('repoGradeFilterBtn');
+      if(gradeBtn&&btn.id!=='repoGradeFilterBtn'){
+        gradeBtn.dataset.f='grade_all';
+        gradeBtn.textContent='🏅 等级筛选 ▾';
+      }
       resetResultRenderLimits('repo');
       filterRepoList(f);
       return;
@@ -1005,8 +1012,29 @@ function toggleGradeMenu(){
   var dd=document.getElementById('gradeDropdown');
   dd.classList.toggle('open');
 }
+function toggleRepoGradeMenu(){
+  var dd=document.getElementById('repoGradeDropdown');
+  if(dd)dd.classList.toggle('open');
+}
+function setRepoGradeFilter(filter,label){
+  var bar=document.getElementById('repoFilters');
+  var btn=document.getElementById('repoGradeFilterBtn');
+  var dd=document.getElementById('repoGradeDropdown');
+  if(!bar||!btn)return;
+  bar.querySelectorAll('.fbtn').forEach(function(b){b.classList.remove('active')});
+  btn.dataset.f=filter;
+  btn.textContent='🏅 '+label+' ▾';
+  btn.classList.add('active');
+  if(dd)dd.classList.remove('open');
+  resetResultRenderLimits('repo');
+  renderRepo();
+}
 document.addEventListener('click',function(e){
-  if(!e.target.closest('.grade-dropdown'))document.getElementById('gradeDropdown').classList.remove('open');
+  if(!e.target.closest('#gradeDropdown'))document.getElementById('gradeDropdown').classList.remove('open');
+  if(!e.target.closest('#repoGradeDropdown')){
+    var repoGrade=document.getElementById('repoGradeDropdown');
+    if(repoGrade)repoGrade.classList.remove('open');
+  }
 });
 
 function addToRepoByGrade(grade){
@@ -1035,6 +1063,20 @@ var USER_TOKEN_KEY='proxy_checker_token';
 var REPO_SYNCED_KEY='proxy_checker_synced';
 var repoCache=null;
 var userTokenCache=null;
+
+function readRepoSyncMeta(){
+  try{return JSON.parse(localStorage.getItem(REPO_SYNCED_KEY))||{}}catch(e){return {}}
+}
+
+function rememberRepoSync(count){
+  try{localStorage.setItem(REPO_SYNCED_KEY,JSON.stringify({count:Number(count)||0,time:Date.now()}))}catch(e){}
+}
+
+function getRepoBaseCount(repo){
+  var meta=readRepoSyncMeta();
+  if(typeof meta.count==='number'&&meta.count>=0)return meta.count;
+  return compactRepo(repo||loadRepo()).length;
+}
 
 function compactRepoItem(p){
   var item={proxy:String(p.proxy||'')};
@@ -1173,6 +1215,20 @@ function renderAutoStatus(data){
   else startAutoPolling(10000);
 }
 
+function refreshRepoAfterAuto(summary){
+  if(!summary||summary.status!=='completed')return;
+  var expected=Number(summary.repo_count||0);
+  if(!expected||expected<=loadRepo().length)return;
+  var key=[summary.finished_at||'',expected].join(':');
+  if(autoRepoRefreshSession===key)return;
+  autoRepoRefreshSession=key;
+  loadRepoFromServer(function(count){
+    if(count>0){
+      toast('自动任务已更新仓库，已刷新到 '+count+' 个代理');
+    }
+  });
+}
+
 function processAutoRealtimeResults(data){
   if(!data)return;
   var state=data.state||{};
@@ -1202,6 +1258,12 @@ function processAutoRealtimeResults(data){
     updateStats();
     saveResults();
   }
+  if(autoLastRunning&&!state.running&&state.last_summary){
+    refreshRepoAfterAuto(state.last_summary);
+  }else if(!state.running&&state.status==='completed'&&state.last_summary){
+    refreshRepoAfterAuto(state.last_summary);
+  }
+  autoLastRunning=!!state.running;
   if(!state.running&&state.status==='stopped'){
     maybePromptAutoStoppedRepo(sessionId||autoStopRequestedSession);
   }
@@ -1315,7 +1377,9 @@ function openAutoSettings(){
     toast('当前部署不支持后台自动任务');
     return;
   }
+  showAutoModal(autoStatusCache||{config:{enabled:false,target_profile:currentTargetProfile,detect_mode:'skip',repo_update_policy:'stable_only'},state:{status:'idle',running:false}});
   post('/api/auto/get',{token:getUserToken(),since:autoResultsIndex,session_id:autoSessionId},function(err,res){
+    if(!document.querySelector('.modal-overlay[data-modal=\"auto\"]'))return;
     if(err||res.error){
       toast(err||res.error||'读取自动任务失败');
       return;
@@ -1327,10 +1391,13 @@ function openAutoSettings(){
 }
 
 function showAutoModal(data){
+  var existing=document.querySelector('.modal-overlay[data-modal=\"auto\"]');
+  if(existing)existing.remove();
   var config=(data&&data.config)||{};
   var state=(data&&data.state)||{};
   var overlay=document.createElement('div');
   overlay.className='modal-overlay show';
+  overlay.dataset.modal='auto';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
   var html='<div class="modal-box" style="max-width:640px;text-align:left">';
   html+='<div class="modal-icon" style="background:linear-gradient(135deg,rgba(34,197,94,.15),rgba(34,197,94,.05));border-color:rgba(34,197,94,.22)">⏱️</div>';
@@ -1428,7 +1495,9 @@ function stopAutoNow(){
 // ============================================================
 function openAppSettings(){
   if(!requireAuthenticatedUI())return;
+  showSettingsModal(appSettings);
   post('/api/settings/get',{},function(err,res){
+    if(!document.querySelector('.modal-overlay[data-modal=\"settings\"]'))return;
     if(err||res.error){toast(err||res.error||'读取设置失败');return}
     if(res.settings)applyAppSettings(res.settings);
     showSettingsModal(res.settings||appSettings);
@@ -1446,9 +1515,12 @@ function settingsRoundsOptions(selected){
 }
 
 function showSettingsModal(settings){
+  var existing=document.querySelector('.modal-overlay[data-modal=\"settings\"]');
+  if(existing)existing.remove();
   settings=Object.assign({},appSettings,settings||{});
   var overlay=document.createElement('div');
   overlay.className='modal-overlay show';
+  overlay.dataset.modal='settings';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
   var html='<div class="modal-box" style="max-width:720px;text-align:left">';
   html+='<div class="modal-icon" style="background:linear-gradient(135deg,rgba(124,92,252,.16),rgba(124,92,252,.05));border-color:rgba(124,92,252,.22)">⚙️</div>';
@@ -1516,7 +1588,9 @@ function saveAppSettings(){
 
 function openRunLogs(){
   if(!requireAuthenticatedUI())return;
+  showRunLogsModal(null);
   post('/api/logs/list',{token:getUserToken()},function(err,res){
+    if(!document.querySelector('.modal-overlay[data-modal=\"logs\"]'))return;
     if(err||res.error){toast(err||res.error||'读取检测日志失败');return}
     showRunLogsModal(res.logs||[]);
   });
@@ -1528,15 +1602,20 @@ function logStatusLabel(status){
 }
 
 function showRunLogsModal(logs){
+  var existing=document.querySelector('.modal-overlay[data-modal=\"logs\"]');
+  if(existing)existing.remove();
   var overlay=document.createElement('div');
   overlay.className='modal-overlay show';
+  overlay.dataset.modal='logs';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
   var html='<div class="modal-box" style="max-width:820px;text-align:left">';
   html+='<div class="modal-icon" style="background:linear-gradient(135deg,rgba(96,165,250,.16),rgba(96,165,250,.05));border-color:rgba(96,165,250,.22)">📋</div>';
   html+='<h3 style="text-align:center">📋 日志</h3>';
   html+='<div class="settings-note">记录手动检测和自动任务的开始时间、结束时间、模式、轮次、并发、数量和结果摘要。</div>';
   html+='<div class="log-list" id="runLogList">';
-  if(!logs.length){
+  if(logs===null){
+    html+='<div class="empty">正在读取日志...</div>';
+  }else if(!logs.length){
     html+='<div class="empty">还没有检测日志</div>';
   }else{
     logs.forEach(function(item){
@@ -1586,10 +1665,31 @@ function syncRepoToServer(repoOverride){
   if(!requireAuthenticatedUI())return;
   var repo=compactRepo(repoOverride||loadRepo());
   var token=getUserToken();
-  post('/api/repo/save',{repo:repo,token:token},function(err,res){
-    if(!err&&res.ok){
-      try{localStorage.setItem(REPO_SYNCED_KEY,JSON.stringify({count:res.count,time:Date.now()}))}catch(e){}
+  post('/api/repo/save',{repo:repo,token:token,mode:'merge',base_count:getRepoBaseCount(repo)},function(err,res){
+    if(res&&res.stale_repo){
+      toast(res.error||'云端仓库已更新，正在刷新');
+      loadRepoFromServer();
+      return;
     }
+    if(!err&&res&&res.ok){
+      rememberRepoSync(res.count);
+      updateCloudRepoCount();
+    }
+  });
+}
+
+function syncRepoReplace(repo,baseCount,callback){
+  if(!requireAuthenticatedUI())return;
+  repo=compactRepo(repo);
+  post('/api/repo/save',{repo:repo,token:getUserToken(),mode:'replace',base_count:baseCount},function(err,res){
+    if(err){if(callback)callback(err);return}
+    if(res&&res.stale_repo){
+      toast(res.error||'云端仓库已更新，正在刷新');
+      loadRepoFromServer(function(){if(callback)callback(null,res)});
+      return;
+    }
+    if(res&&res.ok)rememberRepoSync(res.count);
+    if(callback)callback(null,res);
   });
 }
 
@@ -1628,14 +1728,17 @@ function loadRepoFromServer(callback){
   }
   tryLoadJson(token,function(count,repo){
     if(count>0){
-      saveRepo(repo);
-      renderRepo();
-      if(callback)callback(count);
+          saveRepo(repo,{sync:false});
+          rememberRepoSync(count);
+          updateCloudRepoCount();
+          renderRepo();
+          if(callback)callback(count);
     }else{
       tryLoadJson('default',function(count2,repo2){
         if(count2>0){
-          saveRepo(repo2);
-          syncRepoToServer();
+          saveRepo(repo2,{sync:false});
+          rememberRepoSync(count2);
+          updateCloudRepoCount();
           renderRepo();
           if(callback)callback(count2);
         }else{
@@ -1943,10 +2046,15 @@ function renderRepo(){
 
 function removeFromRepo(idx){
   var repo=loadRepo();
+  var baseCount=getRepoBaseCount(repo);
   repo.splice(idx,1);
-  saveRepo(repo);
+  saveRepo(repo,{sync:false});
   renderRepo();
-  toast('已从仓库移除');
+  syncRepoReplace(repo,baseCount,function(err,res){
+    if(err){toast('删除同步失败: '+err);return}
+    if(res&&res.stale_repo)return;
+    toast('已从仓库移除');
+  });
 }
 
 function exportRepo(){
@@ -1993,11 +2101,69 @@ function toggleRepoIO(){
 }
 function toggleRepoCloud(){
   document.getElementById('repoCloudDropdown').classList.toggle('open');
+  updateCloudRepoCount();
+}
+function toggleRepoClear(){
+  document.getElementById('repoClearDropdown').classList.toggle('open');
 }
 document.addEventListener('click',function(e){
   if(!e.target.closest('#repoIODropdown'))document.getElementById('repoIODropdown').classList.remove('open');
   if(!e.target.closest('#repoCloudDropdown'))document.getElementById('repoCloudDropdown').classList.remove('open');
+  if(!e.target.closest('#repoClearDropdown')){
+    var clearDropdown=document.getElementById('repoClearDropdown');
+    if(clearDropdown)clearDropdown.classList.remove('open');
+  }
 });
+
+function fetchCloudRepo(callback){
+  var token=getUserToken();
+  function tryJson(t,cb){
+    var xhr=new XMLHttpRequest();
+    xhr.open('GET',API_BASE+'/api/repo/'+t+'.json',true);
+    xhr.onload=function(){
+      if(xhr.status===200){
+        try{
+          var data=JSON.parse(xhr.responseText);
+          if(Array.isArray(data)){cb(compactRepo(data));return}
+        }catch(e){}
+      }
+      tryTxt(t,cb);
+    };
+    xhr.onerror=function(){tryTxt(t,cb)};
+    xhr.send();
+  }
+  function tryTxt(t,cb){
+    var xhr=new XMLHttpRequest();
+    xhr.open('GET',API_BASE+'/api/repo/'+t+'.txt',true);
+    xhr.onload=function(){
+      if(xhr.status===200){
+        var lines=xhr.responseText.split('\n').map(function(l){return l.trim()}).filter(Boolean);
+        cb(compactRepo(lines.map(function(proxy){return {proxy:proxy}})));
+      }else{
+        cb([]);
+      }
+    };
+    xhr.onerror=function(){cb([])};
+    xhr.send();
+  }
+  tryJson(token,function(repo){
+    if(repo.length||token==='default'){
+      callback(repo);
+      return;
+    }
+    tryJson('default',callback);
+  });
+}
+
+function updateCloudRepoCount(){
+  var badge=document.getElementById('repoCloudCount');
+  if(!badge)return;
+  badge.textContent='读取中';
+  fetchCloudRepo(function(repo){
+    badge.textContent=repo.length+' 个';
+  });
+}
+
 function saveRepoToCloud(){
   if(!requireAuthenticatedUI())return;
   document.getElementById('repoCloudDropdown').classList.remove('open');
@@ -2005,23 +2171,43 @@ function saveRepoToCloud(){
   var repo=loadRepo();
   if(!repo.length){toast('仓库为空，无需保存');return}
   var token=getUserToken();
-  post('/api/repo/save',{repo:repo,token:token},function(err,res){
+  post('/api/repo/save',{repo:repo,token:token,mode:'merge',base_count:getRepoBaseCount(repo)},function(err,res){
     if(err){toast('保存失败: '+err);return}
-    if(res.ok){
-      try{localStorage.setItem(REPO_SYNCED_KEY,JSON.stringify({count:res.count,time:Date.now()}))}catch(e){}
+    if(res&&res.stale_repo){
+      toast(res.error||'云端仓库已更新，正在刷新');
+      loadRepoFromServer();
+      return;
+    }
+    if(res&&res.ok){
+      rememberRepoSync(res.count);
+      updateCloudRepoCount();
       toast('已保存 '+res.count+' 个代理到云端');
     }
   });
 }
 
-function clearRepo(){
-  if(!loadRepo().length){toast('仓库已经是空的');return}
-  if(!confirm('确定清空本地仓库？\n注意：云端数据不会被删除，可随时通过「恢复云端数据」恢复。'))return;
-  repoCache=[];
-  try{localStorage.removeItem(REPO_KEY)}catch(e){}
-  try{localStorage.setItem('repo_manually_cleared','1')}catch(e){}
+function clearRepoByGrade(grade){
+  var repo=loadRepo();
+  if(!repo.length){toast('仓库已经是空的');return}
+  var target=grade==='ALL'?'全部':('等级 '+grade);
+  var next=grade==='ALL'?[]:repo.filter(function(item){return (item.grade||'?')!==grade});
+  var removed=repo.length-next.length;
+  if(!removed){toast('没有可清空的 '+target+' 代理');return}
+  if(!confirm('确定清空 '+target+' 代理？会同步更新云端仓库和 TXT / JSON 链接。'))return;
+  document.getElementById('repoClearDropdown').classList.remove('open');
+  var baseCount=getRepoBaseCount(repo);
+  saveRepo(next,{sync:false});
   renderRepo();
-  toast('本地仓库已清空（云端数据保留）');
+  syncRepoReplace(next,baseCount,function(err,res){
+    if(err){toast('清空同步失败: '+err);return}
+    if(res&&res.stale_repo)return;
+    updateCloudRepoCount();
+    toast('已清空 '+removed+' 个 '+target+' 代理');
+  });
+}
+
+function clearRepo(){
+  clearRepoByGrade('ALL');
 }
 
 function importRepoTxt(input){
@@ -2050,6 +2236,54 @@ function importRepoTxt(input){
   };
   reader.readAsText(file);
   input.value="";
+}
+
+function exportRepoJson(){
+  var repo=loadRepo();
+  if(!repo.length){toast('仓库为空');return}
+  var json=JSON.stringify(compactRepo(repo),null,2);
+  var b=new Blob([json],{type:'application/json'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(b);
+  a.download='proxy-repo-'+Date.now()+'.json';
+  a.click();
+  toast('已导出 '+repo.length+' 个代理 JSON');
+}
+
+function importRepoJson(input){
+  try{localStorage.removeItem('repo_manually_cleared')}catch(e){}
+  var file=input.files[0];
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var data;
+    try{data=JSON.parse(e.target.result)}catch(err){toast('JSON 格式不正确');input.value='';return}
+    if(!Array.isArray(data)){toast('JSON 必须是代理数组');input.value='';return}
+    var incoming=compactRepo(data.map(function(item){return typeof item==='string'?{proxy:item}:item}));
+    if(!incoming.length){toast('JSON 中没有有效代理');input.value='';return}
+    var repo=loadRepo();
+    var indexByProxy={};
+    repo.forEach(function(item,i){indexByProxy[item.proxy]=i});
+    var added=0;
+    var updated=0;
+    incoming.forEach(function(item){
+      var idx=indexByProxy[item.proxy];
+      if(idx===undefined){
+        repo.push(item);
+        indexByProxy[item.proxy]=repo.length-1;
+        added++;
+      }else{
+        item.added=repo[idx].added||item.added;
+        repo[idx]=Object.assign({},repo[idx],item);
+        updated++;
+      }
+    });
+    saveRepo(repo);
+    renderRepo();
+    toast('已导入 JSON: 新增 '+added+' 个，更新 '+updated+' 个');
+    input.value='';
+  };
+  reader.readAsText(file);
 }
 
 // Initial render
@@ -2090,30 +2324,41 @@ function getRepoLink(button){
     btn.innerHTML='&#128279; 同步中...';
     btn.disabled=true;
   }
-  post('/api/repo/save',{repo:repo,token:token},function(err,res){
+  post('/api/repo/save',{repo:repo,token:token,mode:'merge',base_count:getRepoBaseCount(repo)},function(err,res){
     if(btn){
       btn.innerHTML='&#128279; 仓库链接';
       btn.disabled=false;
     }
-    if(err||res.error){toast('同步失败: '+(err||res.error));return}
-    var url=API_BASE+'/api/repo/'+token+'.txt';
-    copyText(url);
+    if(res&&res.stale_repo){
+      toast(res.error||'云端仓库已更新，正在刷新');
+      loadRepoFromServer();
+      return;
+    }
+    if(err||!res||res.error){toast('同步失败: '+(err||(res&&res.error)||'无响应'));return}
+    rememberRepoSync(res.count);
+    var txtUrl=API_BASE+'/api/repo/'+token+'.txt';
+    var jsonUrl=API_BASE+'/api/repo/'+token+'.json';
+    copyText(txtUrl);
     toast('链接已复制 ('+res.count+'个代理)');
     var overlay=document.createElement('div');
     overlay.className='modal-overlay show';
     overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
-    var html='<div class="modal-box" style="max-width:500px">';
+    var html='<div class="modal-box" style="max-width:620px">';
     html+='<div class="modal-icon" style="background:linear-gradient(135deg,rgba(96,165,250,.15),rgba(96,165,250,.05));border-color:rgba(96,165,250,.2)">&#128279;</div>';
     html+='<h3>仓库链接</h3>';
-    html+='<p style="margin-bottom:16px">在其他程序的代理框中粘贴此链接即可拉取：</p>';
-    html+='<input id="repoLinkInput" readonly value="'+url+'" style="width:100%;padding:12px 14px;background:#0d0d1a;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#e0e0e0;font-family:monospace;font-size:12px;margin-bottom:20px">';
+    html+='<p style="margin-bottom:16px">TXT 适合直接给代理工具订阅，JSON 保留等级、国家、用途等完整信息。</p>';
+    html+='<label style="display:block;text-align:left;color:#888;font-size:12px;font-weight:700;margin-bottom:6px">TXT 链接</label>';
+    html+='<input id="repoTxtLinkInput" readonly value="'+txtUrl+'" style="width:100%;padding:12px 14px;background:#0d0d1a;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#e0e0e0;font-family:monospace;font-size:12px;margin-bottom:12px">';
+    html+='<label style="display:block;text-align:left;color:#888;font-size:12px;font-weight:700;margin-bottom:6px">JSON 链接</label>';
+    html+='<input id="repoJsonLinkInput" readonly value="'+jsonUrl+'" style="width:100%;padding:12px 14px;background:#0d0d1a;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#e0e0e0;font-family:monospace;font-size:12px;margin-bottom:20px">';
     html+='<div style="display:flex;gap:10px;justify-content:center">';
-    html+='<button class="btn btn-ghost" onclick="navigator.clipboard.writeText(document.getElementById(\'repoLinkInput\').value);toast(\'已复制\')">📋 复制链接</button>';
+    html+='<button class="btn btn-ghost" onclick="navigator.clipboard.writeText(document.getElementById(\'repoTxtLinkInput\').value);toast(\'已复制TXT链接\')">📋 复制TXT</button>';
+    html+='<button class="btn btn-ghost" onclick="navigator.clipboard.writeText(document.getElementById(\'repoJsonLinkInput\').value);toast(\'已复制JSON链接\')">📋 复制JSON</button>';
     html+='<button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">✖️ 关闭</button>';
     html+='</div></div>';
     overlay.innerHTML=html;
     document.body.appendChild(overlay);
-    document.getElementById('repoLinkInput').select();
+    document.getElementById('repoTxtLinkInput').select();
   });
 }
 
