@@ -256,6 +256,15 @@ docker compose down
 HOST_PORT=8899
 ```
 
+如果要修改本地构建出来的镜像名或版本号标签，修改 `.env`：
+
+```text
+IMAGE_NAME=proxy-checker
+VERSION=v6.2
+```
+
+本地 `docker compose up -d --build` 会生成类似 `proxy-checker:v6.2` 的镜像。
+
 容器内部服务端口固定为 `8888`，宿主机端口由 `HOST_PORT` 映射。默认持久化卷包括：
 
 - `proxy_checker_repo`：我的仓库 TXT / JSON 数据。
@@ -267,7 +276,7 @@ HOST_PORT=8899
 
 仓库内置 `.github/workflows/docker-image.yml`，会自动构建 Docker 镜像并发布到 GitHub Container Registry：
 
-- 推送到 `main` / `master`：构建并推送 `latest`、分支名和 `sha-xxxxxxx` 标签。
+- 推送到 `main` / `master`：构建并推送 `latest`、README 标题版本号、分支名和 `sha-xxxxxxx` 标签。
 - 推送 `v*` tag：构建并推送 tag 标签，例如 `v6.2.0`。
 - 提交 Pull Request：只构建校验，不推送镜像。
 - 手动触发：在 GitHub Actions 页面选择 `Docker Image` 后点击 `Run workflow`。
@@ -275,20 +284,20 @@ HOST_PORT=8899
 镜像地址格式：
 
 ```text
-ghcr.io/<你的 GitHub 用户名或组织名>/<仓库名>:latest
+ghcr.io/<你的 GitHub 用户名或组织名>/<仓库名>:v6.2
 ```
 
 例如：
 
 ```bash
-docker pull ghcr.io/flyeyas/proxy-checker:latest
+docker pull ghcr.io/flyeyas/proxy-checker:v6.2
 ```
 
 如果要让别人公开拉取镜像，需要到 GitHub 仓库的 `Packages` 页面，把对应 container package 的可见性改为 Public。私有镜像拉取时需要先登录：
 
 ```bash
 echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-docker pull ghcr.io/YOUR_GITHUB_USERNAME/proxy-checker:latest
+docker pull ghcr.io/YOUR_GITHUB_USERNAME/proxy-checker:v6.2
 ```
 
 服务器上直接使用 GHCR 镜像部署：
@@ -300,7 +309,7 @@ cp .env.example .env
 编辑 `.env`：
 
 ```text
-IMAGE=ghcr.io/YOUR_GITHUB_USERNAME/proxy-checker:latest
+IMAGE=ghcr.io/YOUR_GITHUB_USERNAME/proxy-checker:v6.2
 AUTH_PASSWORD=your-strong-password
 ```
 
