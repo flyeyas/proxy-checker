@@ -33,7 +33,13 @@ jobs:
 
       - name: Prepare image name
         id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          version="$(grep -m1 '^# Proxy Checker v' README.md | sed -E 's/^# Proxy Checker (v[0-9.]+).*$/\1/')"
+          if [ -z "$version" ]; then
+            version="v0.0.0"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -45,6 +51,7 @@ jobs:
           images: ${{ steps.image.outputs.name }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.image.outputs.version }},enable={{is_default_branch}}
             type=ref,event=branch
             type=ref,event=pr
             type=ref,event=tag
