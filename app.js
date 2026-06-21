@@ -1,6 +1,6 @@
 var V=[],U=[],F=[],busy=false,totalCount=0,sid=null,resultsIndex=0;
-var API_BASE=window.location.hostname.endsWith('vercel.app')?'':(window.location.hostname==='strongshuai.github.io'?'https://proxy-checker-nu.vercel.app':window.location.origin);
-var isRemote=window.location.hostname.endsWith('vercel.app')||window.location.hostname==='strongshuai.github.io';
+var API_BASE=window.location.hostname.endsWith('vercel.app')?'':(window.location.hostname==='flyeyas.github.io'?'https://proxy-checker-nu.vercel.app':window.location.origin);
+var isRemote=window.location.hostname.endsWith('vercel.app')||window.location.hostname==='flyeyas.github.io';
 var proxyInput=document.getElementById("proxyInput");
 var checkBtn=document.getElementById("checkBtn");
 var stopBtn=document.getElementById("stopBtn");
