@@ -6,6 +6,8 @@ Proxy Checker 是一个自托管优先的免费代理检测、筛选、仓库维
 
 🚀 项目地址：[flyeyas/proxy-checker](https://github.com/flyeyas/proxy-checker)
 
+本项目 fork 自 [strongshuai/proxy-checker](https://github.com/strongshuai/proxy-checker)。
+
 <img width="2970" height="1830" alt="image" src="https://github.com/user-attachments/assets/c970c634-bb01-490d-ae6b-b9d257048623" />
 <img width="2652" height="1563" alt="image" src="https://github.com/user-attachments/assets/84b9a523-aae2-4a4b-940e-954d52544089" />
 <img width="2661" height="1556" alt="image" src="https://github.com/user-attachments/assets/78573d13-5fab-48e9-a60d-532572e5e381" />
