@@ -1,6 +1,6 @@
 services:
   proxy-checker:
-    image: "${IMAGE:?set IMAGE, for example ghcr.io/strongshuai/proxy-checker:latest}"
+    image: "${IMAGE:?set IMAGE, for example ghcr.io/flyeyas/proxy-checker:latest}"
     container_name: proxy-checker
     restart: unless-stopped
     ports:
