@@ -212,6 +212,109 @@ http://localhost:8888
 linux.do
 ```
 
+## Docker 部署
+
+推荐使用 Docker Compose 部署自托管版本，后台自动任务、仓库链接、检测历史和运行日志都会保存在 Docker 命名卷中，容器重建后不会丢失。
+
+首次部署：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env`，至少修改登录密码：
+
+```text
+AUTH_PASSWORD=change-me
+```
+
+启动服务：
+
+```bash
+docker compose up -d --build
+```
+
+打开：
+
+```text
+http://localhost:8888
+```
+
+常用命令：
+
+```bash
+docker compose logs -f
+docker compose restart
+docker compose down
+```
+
+如果要改宿主机访问端口，修改 `.env`：
+
+```text
+HOST_PORT=8899
+```
+
+容器内部服务端口固定为 `8888`，宿主机端口由 `HOST_PORT` 映射。默认持久化卷包括：
+
+- `proxy_checker_repo`：我的仓库 TXT / JSON 数据。
+- `proxy_checker_checked`：已检测历史。
+- `proxy_checker_auto`：自动任务配置和状态。
+- `proxy_checker_logs`：服务日志和运行日志。
+
+## GitHub Actions 自动打包镜像
+
+仓库内置 `.github/workflows/docker-image.yml`，会自动构建 Docker 镜像并发布到 GitHub Container Registry：
+
+- 推送到 `main` / `master`：构建并推送 `latest`、分支名和 `sha-xxxxxxx` 标签。
+- 推送 `v*` tag：构建并推送 tag 标签，例如 `v6.2.0`。
+- 提交 Pull Request：只构建校验，不推送镜像。
+- 手动触发：在 GitHub Actions 页面选择 `Docker Image` 后点击 `Run workflow`。
+
+镜像地址格式：
+
+```text
+ghcr.io/<你的 GitHub 用户名或组织名>/<仓库名>:latest
+```
+
+例如：
+
+```bash
+docker pull ghcr.io/strongshuai/proxy-checker:latest
+```
+
+如果要让别人公开拉取镜像，需要到 GitHub 仓库的 `Packages` 页面，把对应 container package 的可见性改为 Public。私有镜像拉取时需要先登录：
+
+```bash
+echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+docker pull ghcr.io/YOUR_GITHUB_USERNAME/proxy-checker:latest
+```
+
+服务器上直接使用 GHCR 镜像部署：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env`：
+
+```text
+IMAGE=ghcr.io/YOUR_GITHUB_USERNAME/proxy-checker:latest
+AUTH_PASSWORD=your-strong-password
+```
+
+启动：
+
+```bash
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+升级到最新镜像：
+
+```bash
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
 ## 部署位置很重要
 
 最好把 Proxy Checker 部署在你实际跑号、跑业务、调用目标服务的那台服务器上。
