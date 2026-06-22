@@ -69,6 +69,15 @@ os.makedirs(AUTO_DIR, exist_ok=True)
 RUN_LOG_DIR = os.path.join(BASE_DIR, 'run_logs')
 os.makedirs(RUN_LOG_DIR, exist_ok=True)
 
+REPO_UPDATE_POLICIES = (
+    "stable_only",
+    "include_unstable",
+    "archive_all",
+    "grade_a_only",
+    "grade_b_only",
+    "grade_ab_only",
+)
+
 # === Fetch free proxies from external sources ===
 try:
     from fetch_proxies import fetch_proxies, PROXY_SOURCES
@@ -623,7 +632,7 @@ def normalize_auto_config(config):
     if detect_mode not in ("skip", "force"):
         detect_mode = "skip"
     repo_update_policy = str(merged.get("repo_update_policy") or "stable_only")
-    if repo_update_policy not in ("stable_only", "include_unstable", "archive_all"):
+    if repo_update_policy not in REPO_UPDATE_POLICIES:
         repo_update_policy = "stable_only"
     return {
         "enabled": bool(merged.get("enabled")),
@@ -1011,16 +1020,22 @@ def result_to_repo_item(result, existing=None):
 
 
 def result_matches_policy(result, policy):
-    grade = str(result.get("grade") or "F")
+    grade = str(result.get("grade") or "F").upper()
     if policy == "archive_all":
         return True
+    if policy == "grade_a_only":
+        return grade == "A"
+    if policy == "grade_b_only":
+        return grade == "B"
+    if policy == "grade_ab_only":
+        return grade in ("A", "B")
     if policy == "include_unstable":
         return grade in ("A", "B", "C", "D") or result.get("valid") or result.get("unstable")
     return grade in ("A", "B", "C") or result.get("valid")
 
 
 def merge_repo_results(token, repo, results, checked_inputs, policy):
-    policy = policy if policy in ("stable_only", "include_unstable", "archive_all") else "stable_only"
+    policy = policy if policy in REPO_UPDATE_POLICIES else "stable_only"
     participating = {proxy_key(proxy) for proxy in checked_inputs}
     result_by_key = {}
     for result in results:
