@@ -1,6 +1,6 @@
 services:
   proxy-checker:
-    image: "${IMAGE_NAME:-proxy-checker}:${VERSION:-v0.1.0}"
+    image: "${IMAGE_NAME:-proxy-checker}:${VERSION:-v0.1.1}"
     build:
       context: .
       args:

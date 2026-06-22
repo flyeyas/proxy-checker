@@ -1412,7 +1412,7 @@ function showAutoModal(data){
   html+='<div class="auto-field"><label>计划时区</label><select id="autoTimezone">'+timezoneOptions(config.timezone||appSettings.timezone)+'</select></div>';
   html+='<div class="auto-field"><label>检测模式</label><select id="autoTargetProfile">'+autoProfileOptions(config.target_profile||currentTargetProfile)+'</select></div>';
   html+='<div class="auto-field"><label>检测范围</label><select id="autoDetectMode"><option value="skip">只检测新代理</option><option value="force">强制检测全部</option></select></div>';
-  html+='<div class="auto-field full"><label>入库策略</label><select id="autoRepoPolicy"><option value="stable_only">只入库稳定可用(A/B/C)，复测失败旧代理会删除</option><option value="include_unstable">包含不稳定(A/B/C/D)，复测失败旧代理会删除</option><option value="archive_all">所有结果都留档，失效代理也保留</option></select></div>';
+  html+='<div class="auto-field full"><label>入库策略</label><select id="autoRepoPolicy"><option value="stable_only">只入库稳定可用(A/B/C)，复测失败旧代理会删除</option><option value="include_unstable">包含不稳定(A/B/C/D)，复测失败旧代理会删除</option><option value="grade_a_only">只入库等级A，复测后非A旧代理会删除</option><option value="grade_b_only">只入库等级B，复测后非B旧代理会删除</option><option value="grade_ab_only">只入库等级AB，复测后非A/B旧代理会删除</option><option value="archive_all">所有结果都留档，失效代理也保留</option></select></div>';
   html+='<div class="auto-field full"><div class="settings-note">本轮自动检测使用全局设置：'+esc(getRoundsValue())+' 轮，并发 '+esc(getConcurrentValue())+'。要修改请打开“设置”。</div></div>';
   html+='</div>';
   html+='<div class="auto-action-row">';

@@ -10,7 +10,7 @@ Users batch-check free proxy lists for general HTTPS access and AI service reach
 
 ## Product Purpose
 
-Proxy Checker v0.1.0 is a self-hosted-first free proxy checker, repository maintainer, and scheduled automation tool. It pulls from continuously updated public proxy sources, deduplicates large batches, checks HTTP, HTTPS, SOCKS4, SOCKS5, and SOCKS5H proxies, and helps users save, filter, re-check, export, sync, schedule, and share usable proxies through stable TXT / JSON repository links.
+Proxy Checker v0.1.1 is a self-hosted-first free proxy checker, repository maintainer, and scheduled automation tool. It pulls from continuously updated public proxy sources, deduplicates large batches, checks HTTP, HTTPS, SOCKS4, SOCKS5, and SOCKS5H proxies, and helps users save, filter, re-check, export, sync, schedule, and share usable proxies through stable TXT / JSON repository links.
 
 The product supports five target profiles: generic HTTPS proxy checking, OpenAI, Grok, Gemini, and Claude. Results should explain practical network usefulness: base reachability, service homepage reachability, API-domain reachability, Cloudflare status where relevant, exit IP, country, IP type, grade, and recommended use.
 
@@ -49,6 +49,6 @@ Prefer complete, low-friction workflows that do not require manual stitching. Ke
 
 ## Release Context
 
-v0.1.0 is the first public release line for this fork. It keeps the upstream v6.0 general-purpose proxy checker foundation: target profiles for generic/OpenAI/Grok/Gemini/Claude, registration-page detection removal, practical usefulness labels, exit IP/country/IP-type reporting, dynamic proxy source aggregation at 1W+ scale, repository filtering and cloud sync, refresh-safe detection, visible row actions, password-gated same-origin app shell, global settings, run logs, timezone-aware backend auto tasks, automatic repository maintenance, serverless degradation messaging, smoke coverage, and release documentation.
+v0.1.1 builds on the first public release line for this fork. It keeps the upstream v6.0 general-purpose proxy checker foundation: target profiles for generic/OpenAI/Grok/Gemini/Claude, registration-page detection removal, practical usefulness labels, exit IP/country/IP-type reporting, dynamic proxy source aggregation at 1W+ scale, repository filtering and cloud sync, refresh-safe detection, visible row actions, password-gated same-origin app shell, global settings, run logs, timezone-aware backend auto tasks, automatic repository maintenance, serverless degradation messaging, smoke coverage, and release documentation.
 
 This fork starts from the upstream v6.2 repository correctness and repository operations work: automatic task results cannot be overwritten by stale browser caches, repository links expose both TXT and JSON formats, cloud counts are visible before restore, repository grade filtering and clearing are more compact, TXT/JSON import and export are both supported, and common modals open immediately with cached content while refreshing data in the background.
