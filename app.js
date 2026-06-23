@@ -45,7 +45,7 @@ var appSettings={
   timeout:12,
   detect_timeout:8,
   auth_session_days:7,
-  run_log_limit:100,
+  log_limit:100,
   timezone:'UTC',
   timezone_options:[{id:'UTC',name:'UTC'}],
   password_configurable:true
@@ -1491,7 +1491,7 @@ function stopAutoNow(){
 }
 
 // ============================================================
-// Global settings and run logs
+// Global settings and logs
 // ============================================================
 function openAppSettings(){
   if(!requireAuthenticatedUI())return;
@@ -1534,7 +1534,7 @@ function showSettingsModal(settings){
   html+='<div class="auto-field"><label>请求超时（秒）</label><input id="settingsTimeout" type="number" min="3" max="120" step="1" value="'+esc(settings.timeout||12)+'"></div>';
   html+='<div class="auto-field"><label>协议识别超时（秒）</label><input id="settingsDetectTimeout" type="number" min="3" max="120" step="1" value="'+esc(settings.detect_timeout||8)+'"></div>';
   html+='<div class="auto-field"><label>登录有效天数</label><input id="settingsSessionDays" type="number" min="1" max="365" step="1" value="'+esc(settings.auth_session_days||7)+'"></div>';
-  html+='<div class="auto-field"><label>日志保留条数</label><input id="settingsLogLimit" type="number" min="20" max="1000" step="10" value="'+esc(settings.run_log_limit||100)+'"></div>';
+  html+='<div class="auto-field"><label>日志保留条数</label><input id="settingsLogLimit" type="number" min="20" max="1000" step="10" value="'+esc(settings.log_limit||100)+'"></div>';
   html+='<div class="auto-field full"><label>默认时区</label><select id="settingsTimezone">'+timezoneOptions(settings.timezone||appSettings.timezone)+'</select></div>';
   html+='<div class="auto-field full"><label>新登录密码</label><input id="settingsPassword" type="password" autocomplete="new-password" placeholder="'+(settings.password_configurable?'留空表示不修改':'当前由环境变量控制，页面不能永久修改')+'" '+(settings.password_configurable?'':'disabled')+'></div>';
   html+='<div class="auto-field full"><label>确认新密码</label><input id="settingsPasswordConfirm" type="password" autocomplete="new-password" placeholder="再次输入新密码" '+(settings.password_configurable?'':'disabled')+'></div>';
@@ -1568,7 +1568,7 @@ function readSettingsFromModal(){
     timeout:parseInt(document.getElementById('settingsTimeout').value)||12,
     detect_timeout:parseInt(document.getElementById('settingsDetectTimeout').value)||8,
     auth_session_days:parseInt(document.getElementById('settingsSessionDays').value)||7,
-    run_log_limit:parseInt(document.getElementById('settingsLogLimit').value)||100,
+    log_limit:parseInt(document.getElementById('settingsLogLimit').value)||100,
     timezone:document.getElementById('settingsTimezone').value||'UTC',
     auth_password:password||''
   };
@@ -1586,13 +1586,13 @@ function saveAppSettings(){
   });
 }
 
-function openRunLogs(){
+function openLogs(){
   if(!requireAuthenticatedUI())return;
-  showRunLogsModal(null);
+  showLogsModal(null);
   post('/api/logs/list',{token:getUserToken()},function(err,res){
     if(!document.querySelector('.modal-overlay[data-modal=\"logs\"]'))return;
     if(err||res.error){toast(err||res.error||'读取检测日志失败');return}
-    showRunLogsModal(res.logs||[]);
+    showLogsModal(res.logs||[]);
   });
 }
 
@@ -1601,7 +1601,7 @@ function logStatusLabel(status){
   return map[status]||status||'-';
 }
 
-function showRunLogsModal(logs){
+function showLogsModal(logs){
   var existing=document.querySelector('.modal-overlay[data-modal=\"logs\"]');
   if(existing)existing.remove();
   var overlay=document.createElement('div');
@@ -1612,7 +1612,7 @@ function showRunLogsModal(logs){
   html+='<div class="modal-icon" style="background:linear-gradient(135deg,rgba(96,165,250,.16),rgba(96,165,250,.05));border-color:rgba(96,165,250,.22)">📋</div>';
   html+='<h3 style="text-align:center">📋 日志</h3>';
   html+='<div class="settings-note">记录手动检测和自动任务的开始时间、结束时间、模式、轮次、并发、数量和结果摘要。</div>';
-  html+='<div class="log-list" id="runLogList">';
+  html+='<div class="log-list" id="logList">';
   if(logs===null){
     html+='<div class="empty">正在读取日志...</div>';
   }else if(!logs.length){
@@ -1642,21 +1642,21 @@ function showRunLogsModal(logs){
   }
   html+='</div>';
   html+='<div class="auto-inline" style="justify-content:center;margin-top:12px">';
-  html+='<button class="btn btn-danger" onclick="clearRunLogs()">&#128465; 清空日志</button>';
-  html+='<button class="btn btn-ghost" onclick="openRunLogs();this.closest(\'.modal-overlay\').remove()">🔄 刷新</button>';
+  html+='<button class="btn btn-danger" onclick="clearLogs()">&#128465; 清空日志</button>';
+  html+='<button class="btn btn-ghost" onclick="openLogs();this.closest(\'.modal-overlay\').remove()">🔄 刷新</button>';
   html+='<button class="btn btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">✖️ 关闭</button>';
   html+='</div></div>';
   overlay.innerHTML=html;
   document.body.appendChild(overlay);
 }
 
-function clearRunLogs(){
+function clearLogs(){
   if(!confirm('确定清空检测日志？'))return;
   post('/api/logs/clear',{token:getUserToken()},function(err,res){
     if(err||res.error){toast(err||res.error||'清空失败');return}
     var modal=document.querySelector('.modal-overlay.show');
     if(modal)modal.remove();
-    showRunLogsModal(res.logs||[]);
+    showLogsModal(res.logs||[]);
     toast('检测日志已清空');
   });
 }

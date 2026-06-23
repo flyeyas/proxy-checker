@@ -40,7 +40,7 @@ Avoid marketing-page composition, decorative cards, oversized hero sections, hid
 - Show scheduled times in one explicit plan timezone, never by mixing server-local text with browser-local timestamp formatting.
 - Keep run history visible through a product-level log view, not only process logs.
 - Make serverless deployments degrade clearly when background scheduling is unavailable.
-- Treat `config.local.json`, environment variables, logs, repository data, checked history, auto state, and run logs as deployment-local state.
+- Treat `config.local.json`, environment variables, logs, repository data, checked history, and auto state as deployment-local state.
 - Keep result tags understandable through plain-language title text.
 
 ## Accessibility & Inclusion
@@ -49,6 +49,6 @@ Prefer complete, low-friction workflows that do not require manual stitching. Ke
 
 ## Release Context
 
-v0.1.1 builds on the first public release line for this fork. It keeps the upstream v6.0 general-purpose proxy checker foundation: target profiles for generic/OpenAI/Grok/Gemini/Claude, registration-page detection removal, practical usefulness labels, exit IP/country/IP-type reporting, dynamic proxy source aggregation at 1W+ scale, repository filtering and cloud sync, refresh-safe detection, visible row actions, password-gated same-origin app shell, global settings, run logs, timezone-aware backend auto tasks, automatic repository maintenance, serverless degradation messaging, smoke coverage, and release documentation.
+v0.1.1 builds on the first public release line for this fork. It keeps the upstream v6.0 general-purpose proxy checker foundation: target profiles for generic/OpenAI/Grok/Gemini/Claude, registration-page detection removal, practical usefulness labels, exit IP/country/IP-type reporting, dynamic proxy source aggregation at 1W+ scale, repository filtering and cloud sync, refresh-safe detection, visible row actions, password-gated same-origin app shell, global settings, logs, timezone-aware backend auto tasks, automatic repository maintenance, serverless degradation messaging, smoke coverage, and release documentation.
 
 This fork starts from the upstream v6.2 repository correctness and repository operations work: automatic task results cannot be overwritten by stale browser caches, repository links expose both TXT and JSON formats, cloud counts are visible before restore, repository grade filtering and clearing are more compact, TXT/JSON import and export are both supported, and common modals open immediately with cached content while refreshing data in the background.

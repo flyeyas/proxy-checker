@@ -5,8 +5,15 @@ services:
     restart: unless-stopped
     ports:
       - "${HOST_PORT:-8888}:8888"
+      - "${PROXY_HOST_BIND:-127.0.0.1}:${PROXY_HOST_PORT:-7890}:7890"
     environment:
       PORT: "8888"
+      PROXY_GATEWAY_ENABLED: "${PROXY_GATEWAY_ENABLED:-true}"
+      PROXY_GATEWAY_BIND: "0.0.0.0"
+      PROXY_GATEWAY_PORT: "7890"
+      PROXY_GATEWAY_GRADES: "${PROXY_GATEWAY_GRADES:-A,B}"
+      PROXY_GATEWAY_TOKEN: "${PROXY_GATEWAY_TOKEN:-}"
+      PROXY_GATEWAY_TIMEOUT: "${PROXY_GATEWAY_TIMEOUT:-20}"
       AUTH_PASSWORD: "${AUTH_PASSWORD:?set AUTH_PASSWORD in .env before starting}"
       AUTH_SESSION_DAYS: "${AUTH_SESSION_DAYS:-7}"
       CHECK_ROUNDS: "${CHECK_ROUNDS:-2}"
@@ -15,14 +22,14 @@ services:
       MAX_CONCURRENT_LIMIT: "${MAX_CONCURRENT_LIMIT:-200}"
       TIMEOUT: "${TIMEOUT:-12}"
       DETECT_TIMEOUT: "${DETECT_TIMEOUT:-8}"
-      RUN_LOG_LIMIT: "${RUN_LOG_LIMIT:-100}"
+      LOG_LIMIT: "${LOG_LIMIT:-100}"
       APP_TIMEZONE: "${APP_TIMEZONE:-Asia/Shanghai}"
-      LOG_FILE: "/app/run_logs/server.log"
+      LOG_FILE: "/app/logs/server.log"
     volumes:
       - proxy_checker_repo:/app/repo_data
       - proxy_checker_checked:/app/checked_data
       - proxy_checker_auto:/app/auto_data
-      - proxy_checker_logs:/app/run_logs
+      - proxy_checker_logs:/app/logs
     healthcheck:
       test:
         [

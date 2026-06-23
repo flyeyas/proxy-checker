@@ -2,15 +2,20 @@ import json
 import time
 import os
 import sys
+import base64
 import threading
 import asyncio
 import logging
 import hashlib
 import hmac
+import select
+import socket
+import ssl
+from urllib.parse import unquote, urlsplit
 from datetime import datetime, timedelta, timezone
 from http import cookies
 from http.server import HTTPServer
-from socketserver import ThreadingMixIn
+from socketserver import ThreadingMixIn, TCPServer, StreamRequestHandler
 
 try:
     from zoneinfo import ZoneInfo
@@ -18,65 +23,66 @@ except ImportError:
     ZoneInfo = None
 
 from proxy_check import CheckConfig, DEFAULT_TARGET_CHAT, ProxyCheckEngine, TARGET_PROFILE_OPTIONS
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_LOCAL_PATH = os.path.join(BASE_DIR, "config.local.json")
-
-
-def load_config():
-    config = {}
-    for name in ("config.json", "config.local.json"):
-        path = os.path.join(BASE_DIR, name)
-        if not os.path.isfile(path):
-            continue
-        with open(path, "r", encoding="utf-8") as f:
-            loaded = json.load(f)
-        if isinstance(loaded, dict):
-            config.update(loaded)
-    return config
-
-
-CONFIG = load_config()
-
-
-def get_config_value(key, env_name, default):
-    if env_name in os.environ:
-        return os.environ[env_name]
-    return CONFIG.get(key, default)
-
-
-def get_config_int(key, env_name, default):
-    try:
-        return int(get_config_value(key, env_name, default))
-    except (TypeError, ValueError):
-        return default
+from proxy_checker.config import (
+    APP_TIMEZONE,
+    AUTH_COOKIE_NAME,
+    AUTH_PASSWORD,
+    AUTH_SESSION_DAYS,
+    AUTH_SESSION_SECRET,
+    AUTH_SESSION_SECONDS,
+    AUTO_DIR,
+    BASE_DIR,
+    CHECK_ROUNDS,
+    CONFIG_LOCAL_PATH,
+    DETECT_TIMEOUT,
+    LOG_FILE_PATH,
+    LOG_LIMIT,
+    MAX_CHECK_ROUNDS,
+    MAX_CONCURRENT,
+    MAX_CONCURRENT_LIMIT,
+    PORT,
+    PROXY_GATEWAY_BIND,
+    PROXY_GATEWAY_ENABLED,
+    PROXY_GATEWAY_GRADES,
+    PROXY_GATEWAY_PORT,
+    PROXY_GATEWAY_TIMEOUT,
+    PROXY_GATEWAY_TOKEN,
+    REPO_DIR,
+    REPO_UPDATE_POLICIES,
+    TIMEOUT,
+    TIMEZONE_IDS,
+    TIMEZONE_OPTIONS,
+)
+from proxy_checker.storage.files import (
+    atomic_write_json,
+    atomic_write_text,
+    read_json_file as read_json_file_base,
+)
+from proxy_checker.storage.checked_store import (
+    append_checked_list,
+    checked_txt_path,
+    read_checked_list,
+    write_checked_list,
+)
+from proxy_checker.storage.repo_store import (
+    compact_repo,
+    compact_repo_item,
+    read_repo_data,
+    save_repo_payload,
+    write_repo_data,
+)
+from proxy_checker.storage.log_store import (
+    clear_logs,
+    finish_log,
+    read_logs,
+    set_log_limit,
+    start_log,
+)
+from proxy_checker.utils import normalize_proxy_list, proxy_key, sanitize_token
 
 # ============================================================
 # My Repository — save/retrieve repo proxies as txt
 # ============================================================
-REPO_DIR = os.path.join(BASE_DIR, 'repo_data')
-os.makedirs(REPO_DIR, exist_ok=True)
-
-# Checked proxies persistence — per-token checked history
-CHECKED_DIR = os.path.join(BASE_DIR, 'checked_data')
-os.makedirs(CHECKED_DIR, exist_ok=True)
-
-# Auto mode persistence — per-token schedule and run state
-AUTO_DIR = os.path.join(BASE_DIR, 'auto_data')
-os.makedirs(AUTO_DIR, exist_ok=True)
-
-# Run log persistence — per-token manual and auto task summaries
-RUN_LOG_DIR = os.path.join(BASE_DIR, 'run_logs')
-os.makedirs(RUN_LOG_DIR, exist_ok=True)
-
-REPO_UPDATE_POLICIES = (
-    "stable_only",
-    "include_unstable",
-    "archive_all",
-    "grade_a_only",
-    "grade_b_only",
-    "grade_ab_only",
-)
 
 # === Fetch free proxies from external sources ===
 try:
@@ -102,10 +108,6 @@ try:
 except Exception:
     pass
 
-LOG_FILE_PATH = str(get_config_value("log_file", "LOG_FILE", os.path.join(BASE_DIR, "server.log")))
-if not os.path.isabs(LOG_FILE_PATH):
-    LOG_FILE_PATH = os.path.join(BASE_DIR, LOG_FILE_PATH)
-
 # --- Logging ---
 logging.basicConfig(
     level=logging.INFO,
@@ -116,44 +118,6 @@ logging.basicConfig(
     ]
 )
 log = logging.getLogger('vpntest')
-
-# ============================================================
-# Configuration
-# ============================================================
-TIMEZONE_OPTIONS = (
-    {"id": "UTC", "name": "UTC"},
-    {"id": "Asia/Shanghai", "name": "中国/新加坡/马来西亚 UTC+8"},
-    {"id": "Asia/Tokyo", "name": "日本/韩国 UTC+9"},
-    {"id": "Asia/Bangkok", "name": "泰国/越南 UTC+7"},
-    {"id": "Asia/Dubai", "name": "迪拜 UTC+4"},
-    {"id": "Europe/London", "name": "伦敦"},
-    {"id": "Europe/Berlin", "name": "欧洲中部"},
-    {"id": "America/New_York", "name": "美国东部"},
-    {"id": "America/Chicago", "name": "美国中部"},
-    {"id": "America/Denver", "name": "美国山地"},
-    {"id": "America/Los_Angeles", "name": "美国西部"},
-    {"id": "Australia/Sydney", "name": "悉尼"},
-)
-TIMEZONE_IDS = {item["id"] for item in TIMEZONE_OPTIONS}
-TIMEOUT = get_config_int("timeout", "TIMEOUT", 12)
-DETECT_TIMEOUT = get_config_int("detect_timeout", "DETECT_TIMEOUT", 8)
-MAX_CONCURRENT = get_config_int("max_concurrent", "MAX_CONCURRENT", 30)
-MAX_CONCURRENT_LIMIT = get_config_int("max_concurrent_limit", "MAX_CONCURRENT_LIMIT", 200)
-CHECK_ROUNDS = get_config_int("check_rounds", "CHECK_ROUNDS", 2)
-MAX_CHECK_ROUNDS = get_config_int("max_check_rounds", "MAX_CHECK_ROUNDS", 3)
-RUN_LOG_LIMIT = get_config_int("run_log_limit", "RUN_LOG_LIMIT", 100)
-PORT = get_config_int("port", "PORT", 8888)
-AUTH_PASSWORD = str(get_config_value("auth_password", "AUTH_PASSWORD", "linux.do"))
-AUTH_SESSION_DAYS = get_config_int("auth_session_days", "AUTH_SESSION_DAYS", 7)
-AUTH_COOKIE_NAME = "proxy_checker_auth"
-AUTH_SESSION_SECONDS = max(1, AUTH_SESSION_DAYS) * 86400
-AUTH_SESSION_SECRET = str(get_config_value("auth_session_secret", "AUTH_SESSION_SECRET", AUTH_PASSWORD))
-APP_TIMEZONE = str(get_config_value("timezone", "APP_TIMEZONE", "UTC"))
-MAX_CHECK_ROUNDS = max(1, min(10, MAX_CHECK_ROUNDS))
-CHECK_ROUNDS = max(1, min(MAX_CHECK_ROUNDS, CHECK_ROUNDS))
-RUN_LOG_LIMIT = max(20, min(1000, RUN_LOG_LIMIT))
-if APP_TIMEZONE not in TIMEZONE_IDS:
-    APP_TIMEZONE = "UTC"
 
 TARGET_CHAT = DEFAULT_TARGET_CHAT
 check_engine = ProxyCheckEngine(
@@ -169,6 +133,8 @@ sessions_lock = threading.Lock()
 auto_runtime = {}
 auto_stopped_results = {}
 auto_lock = threading.Lock()
+proxy_gateway_lock = threading.Lock()
+proxy_gateway_index = 0
 TARGET_PROFILE_IDS = {str(item["id"]) for item in TARGET_PROFILE_OPTIONS}
 
 
@@ -262,309 +228,96 @@ def format_timestamp(timestamp, timezone_id=None):
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def sanitize_token(value):
-    token = str(value or "default").strip()
-    if token.replace("_", "").isalnum():
-        return token
-    return "default"
-
-
-def atomic_write_json(path, data):
-    tmp_path = f"{path}.tmp.{os.getpid()}.{threading.get_ident()}"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
-    os.replace(tmp_path, path)
-
-
-def atomic_write_text(path, text):
-    tmp_path = f"{path}.tmp.{os.getpid()}.{threading.get_ident()}"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        f.write(text)
-    os.replace(tmp_path, path)
-
-
 def read_json_file(path, fallback):
-    if not os.path.isfile(path):
-        return fallback
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if data is not None else fallback
-    except Exception as exc:
-        log.warning("Failed to read json file", extra={"path": path, "error": str(exc)})
-        return fallback
-
-
-def proxy_key(value):
-    return str(value or "").strip().lower()
-
-
-def normalize_proxy_list(items):
-    out = []
-    seen = set()
-    for item in items or []:
-        if isinstance(item, dict):
-            proxy = str(item.get("proxy", "")).strip()
-        else:
-            proxy = str(item or "").strip()
-        if not proxy:
-            continue
-        key = proxy_key(proxy)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(proxy)
-    return out
-
-
-def repo_json_path(token):
-    return os.path.join(REPO_DIR, f"{sanitize_token(token)}.json")
-
-
-def repo_txt_path(token):
-    return os.path.join(REPO_DIR, f"{sanitize_token(token)}.txt")
-
-
-def checked_txt_path(token):
-    return os.path.join(CHECKED_DIR, f"{sanitize_token(token)}.txt")
+    return read_json_file_base(path, fallback, log)
 
 
 def auto_json_path(token):
     return os.path.join(AUTO_DIR, f"{sanitize_token(token)}.json")
 
 
-def run_log_json_path(token):
-    return os.path.join(RUN_LOG_DIR, f"{sanitize_token(token)}.json")
+def proxy_gateway_grade_set():
+    grades = {
+        str(item).strip().upper()
+        for item in PROXY_GATEWAY_GRADES.replace(";", ",").split(",")
+        if str(item).strip()
+    }
+    return grades or {"A", "B"}
 
 
-def compact_repo_item(item):
-    if not isinstance(item, dict):
-        item = {"proxy": str(item or "")}
-    proxy = str(item.get("proxy", "")).strip()
-    if not proxy:
+def proxy_gateway_repo_tokens():
+    if PROXY_GATEWAY_TOKEN:
+        return [sanitize_token(PROXY_GATEWAY_TOKEN)]
+    tokens = set()
+    for name in os.listdir(REPO_DIR):
+        base, ext = os.path.splitext(name)
+        if ext in (".json", ".txt") and base:
+            tokens.add(sanitize_token(base))
+    return sorted(tokens)
+
+
+def normalize_upstream_proxy(value):
+    raw = str(value or "").strip()
+    if not raw:
         return None
-    now = int(time.time() * 1000)
-    compact = {"proxy": proxy, "grade": str(item.get("grade") or "?")}
-    for key in ("latency", "ip", "country", "ip_type", "recommended_use", "target_profile", "target_name"):
-        value = item.get(key)
-        if value is not None and value != "":
-            compact[key] = value
-    for key in ("service_reachable", "api_reachable", "cf_bypass"):
-        if item.get(key) is True:
-            compact[key] = True
-    compact["added"] = item.get("added") or now
-    compact["updated"] = item.get("updated") or compact["added"]
-    return compact
+    candidate = raw if "://" in raw else f"http://{raw}"
+    parsed = urlsplit(candidate)
+    scheme = parsed.scheme.lower()
+    if scheme not in ("http", "https"):
+        return None
+    host = parsed.hostname
+    port = parsed.port or (443 if scheme == "https" else 80)
+    if not host or not port:
+        return None
+    auth = ""
+    if parsed.username:
+        user = unquote(parsed.username or "")
+        password = unquote(parsed.password or "")
+        token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+        auth = f"Proxy-Authorization: Basic {token}\r\n"
+    return {
+        "raw": raw,
+        "scheme": scheme,
+        "host": host,
+        "port": port,
+        "auth": auth,
+    }
 
 
-def compact_repo(repo):
-    out = []
+def proxy_gateway_candidates():
+    allowed_grades = proxy_gateway_grade_set()
+    candidates = []
     seen = set()
-    for item in repo or []:
-        compact = compact_repo_item(item)
-        if not compact:
-            continue
-        key = proxy_key(compact["proxy"])
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(compact)
-    return out
-
-
-def read_repo_data(token):
-    token = sanitize_token(token)
-    json_file = repo_json_path(token)
-    if os.path.isfile(json_file):
-        data = read_json_file(json_file, [])
-        if isinstance(data, list):
-            return compact_repo(data)
-    txt_file = repo_txt_path(token)
-    if not os.path.isfile(txt_file):
-        return []
-    with open(txt_file, "r", encoding="utf-8") as f:
-        return compact_repo({"proxy": line.strip()} for line in f if line.strip())
-
-
-def write_repo_data(token, repo):
-    token = sanitize_token(token)
-    repo = compact_repo(repo)
-    atomic_write_json(repo_json_path(token), repo)
-    atomic_write_text(repo_txt_path(token), "\n".join(item["proxy"] for item in repo))
-    return repo
-
-
-def merge_repo_data(existing, incoming):
-    merged = compact_repo(existing)
-    index_by_key = {proxy_key(item["proxy"]): i for i, item in enumerate(merged)}
-    for item in compact_repo(incoming):
-        key = proxy_key(item["proxy"])
-        if not key:
-            continue
-        index = index_by_key.get(key)
-        if index is None:
-            index_by_key[key] = len(merged)
-            merged.append(item)
-        else:
-            previous = merged[index]
-            item["added"] = previous.get("added") or item.get("added")
-            merged[index] = {**previous, **item}
-    return compact_repo(merged)
-
-
-def save_repo_payload(token, incoming, mode="merge", base_count=None):
-    token = sanitize_token(token)
-    mode = mode if mode in ("merge", "replace") else "merge"
-    incoming_repo = compact_repo(incoming)
-    existing_repo = read_repo_data(token)
-    current_count = len(existing_repo)
-    try:
-        expected_count = int(base_count)
-    except (TypeError, ValueError):
-        expected_count = None
-
-    if mode == "replace":
-        if expected_count is None and current_count > len(incoming_repo):
-            return None, {
-                "ok": False,
-                "stale_repo": True,
-                "current_count": current_count,
-                "submitted_count": len(incoming_repo),
-                "error": "云端仓库已有更多代理，请先刷新云端仓库后再删除或覆盖",
-            }
-        if expected_count is not None and expected_count != current_count:
-            return None, {
-                "ok": False,
-                "stale_repo": True,
-                "current_count": current_count,
-                "submitted_count": len(incoming_repo),
-                "base_count": expected_count,
-                "error": "云端仓库已被更新，请先刷新云端仓库后再删除或覆盖",
-            }
-        saved = write_repo_data(token, incoming_repo)
-    else:
-        saved = write_repo_data(token, merge_repo_data(existing_repo, incoming_repo))
-
-    return saved, {
-        "ok": True,
-        "mode": mode,
-        "count": len(saved),
-        "current_count": current_count,
-        "submitted_count": len(incoming_repo),
-    }
-
-
-def read_checked_list(token):
-    path = checked_txt_path(token)
-    if not os.path.isfile(path):
-        return []
-    with open(path, "r", encoding="utf-8") as f:
-        return [line.strip() for line in f if line.strip()]
-
-
-def write_checked_list(token, proxies):
-    proxies = normalize_proxy_list(proxies)
-    atomic_write_text(checked_txt_path(token), "\n".join(proxies))
-    return proxies
-
-
-def append_checked_list(token, proxies):
-    existing = read_checked_list(token)
-    seen = {proxy_key(proxy) for proxy in existing}
-    merged = list(existing)
-    for proxy in normalize_proxy_list(proxies):
-        key = proxy_key(proxy)
-        if key not in seen:
+    for token in proxy_gateway_repo_tokens():
+        for item in read_repo_data(token):
+            grade = str(item.get("grade") or "").upper()
+            if grade not in allowed_grades:
+                continue
+            upstream = normalize_upstream_proxy(item.get("proxy"))
+            if not upstream:
+                continue
+            key = f"{upstream['scheme']}://{upstream['host']}:{upstream['port']}"
+            if key in seen:
+                continue
             seen.add(key)
-            merged.append(proxy)
-    return write_checked_list(token, merged)
+            candidates.append(upstream)
+    return candidates
 
 
-def compact_run_log(entry):
-    if not isinstance(entry, dict):
-        return None
-    log_id = str(entry.get("id") or "").strip()
-    if not log_id:
-        return None
-    out = {
-        "id": log_id,
-        "type": str(entry.get("type") or "manual"),
-        "status": str(entry.get("status") or "running"),
-        "started_at": int(entry.get("started_at") or time.time()),
-    }
-    for key in (
-        "finished_at", "duration_seconds", "session_id", "reason", "target_profile",
-        "target_name", "rounds", "max_concurrent", "detect_mode", "repo_update_policy",
-        "schedule_type", "interval_hours", "daily_time", "timezone", "source_count",
-        "repo_input_count", "repo_count", "input_count", "skipped", "total", "done",
-        "valid_count", "unstable_count", "invalid_count", "repo_added", "repo_updated",
-        "repo_removed", "error",
-    ):
-        value = entry.get(key)
-        if value is not None and value != "":
-            out[key] = value
-    return out
-
-
-def read_run_logs(token):
-    data = read_json_file(run_log_json_path(token), [])
-    if not isinstance(data, list):
+def ordered_proxy_gateway_candidates():
+    global proxy_gateway_index
+    candidates = proxy_gateway_candidates()
+    if not candidates:
         return []
-    logs = [compact_run_log(item) for item in data]
-    return [item for item in logs if item]
+    with proxy_gateway_lock:
+        start = proxy_gateway_index % len(candidates)
+        proxy_gateway_index = (proxy_gateway_index + 1) % len(candidates)
+    return candidates[start:] + candidates[:start]
 
 
-def write_run_logs(token, logs):
-    cleaned = [compact_run_log(item) for item in logs]
-    cleaned = [item for item in cleaned if item]
-    cleaned.sort(key=lambda item: int(item.get("started_at") or 0), reverse=True)
-    atomic_write_json(run_log_json_path(token), cleaned[:RUN_LOG_LIMIT])
-    return cleaned[:RUN_LOG_LIMIT]
-
-
-def start_run_log(token, entry):
-    token = sanitize_token(token)
-    now = int(time.time())
-    entry = dict(entry or {})
-    entry.setdefault("id", f"log_{now}_{threading.get_ident()}")
-    entry.setdefault("started_at", now)
-    entry.setdefault("status", "running")
-    logs = read_run_logs(token)
-    logs.insert(0, entry)
-    write_run_logs(token, logs)
-    return entry["id"]
-
-
-def finish_run_log(token, log_id, updates):
-    token = sanitize_token(token)
-    logs = read_run_logs(token)
-    now = int(time.time())
-    found = False
-    for item in logs:
-        if item.get("id") != log_id:
-            continue
-        item.update(updates or {})
-        item.setdefault("finished_at", now)
-        item["duration_seconds"] = max(0, int(item.get("finished_at") or now) - int(item.get("started_at") or now))
-        found = True
-        break
-    if not found:
-        entry = dict(updates or {})
-        entry["id"] = log_id
-        entry.setdefault("started_at", now)
-        entry.setdefault("finished_at", now)
-        entry["duration_seconds"] = 0
-        logs.insert(0, entry)
-    return write_run_logs(token, logs)
-
-
-def clear_run_logs(token):
-    atomic_write_json(run_log_json_path(token), [])
-
-
-def run_logs_payload(token):
+def logs_payload(token):
     timezone_id = APP_TIMEZONE
-    logs = read_run_logs(token)
+    logs = read_logs(token)
     for item in logs:
         timezone_id = normalize_timezone(item.get("timezone", APP_TIMEZONE))
         item["started_text"] = format_timestamp(item.get("started_at"), timezone_id)
@@ -755,9 +508,16 @@ def public_settings_payload():
         "timeout": TIMEOUT,
         "detect_timeout": DETECT_TIMEOUT,
         "auth_session_days": AUTH_SESSION_DAYS,
-        "run_log_limit": RUN_LOG_LIMIT,
+        "log_limit": LOG_LIMIT,
         "timezone": APP_TIMEZONE,
         "port": PORT,
+        "proxy_gateway": {
+            "enabled": PROXY_GATEWAY_ENABLED,
+            "bind": PROXY_GATEWAY_BIND,
+            "port": PROXY_GATEWAY_PORT,
+            "grades": sorted(proxy_gateway_grade_set()),
+            "token": PROXY_GATEWAY_TOKEN or None,
+        },
         "timezone_options": list(TIMEZONE_OPTIONS),
         "password_configurable": "AUTH_PASSWORD" not in os.environ,
     }
@@ -765,7 +525,7 @@ def public_settings_payload():
 
 def apply_runtime_settings(settings):
     global TIMEOUT, DETECT_TIMEOUT, MAX_CONCURRENT, MAX_CONCURRENT_LIMIT
-    global CHECK_ROUNDS, MAX_CHECK_ROUNDS, RUN_LOG_LIMIT, AUTH_PASSWORD
+    global CHECK_ROUNDS, MAX_CHECK_ROUNDS, LOG_LIMIT, AUTH_PASSWORD
     global AUTH_SESSION_DAYS, AUTH_SESSION_SECONDS, AUTH_SESSION_SECRET
     global APP_TIMEZONE, check_engine
 
@@ -779,7 +539,8 @@ def apply_runtime_settings(settings):
     DETECT_TIMEOUT = normalize_timeout(settings.get("detect_timeout"), DETECT_TIMEOUT)
     AUTH_SESSION_DAYS = max(1, min(365, get_int_from(settings, "auth_session_days", AUTH_SESSION_DAYS)))
     AUTH_SESSION_SECONDS = AUTH_SESSION_DAYS * 86400
-    RUN_LOG_LIMIT = max(20, min(1000, get_int_from(settings, "run_log_limit", RUN_LOG_LIMIT)))
+    LOG_LIMIT = max(20, min(1000, get_int_from(settings, "log_limit", LOG_LIMIT)))
+    set_log_limit(LOG_LIMIT)
     APP_TIMEZONE = normalize_timezone(settings.get("timezone", APP_TIMEZONE))
     new_password = str(settings.get("auth_password") or "").strip()
     password_changed = False
@@ -816,7 +577,7 @@ def save_runtime_settings(settings):
         "timeout": TIMEOUT,
         "detect_timeout": DETECT_TIMEOUT,
         "auth_session_days": AUTH_SESSION_DAYS,
-        "run_log_limit": RUN_LOG_LIMIT,
+        "log_limit": LOG_LIMIT,
         "timezone": APP_TIMEZONE,
     })
     if password_changed:
@@ -1165,7 +926,7 @@ def finalize_auto_run(token, runtime, status, error=None, repo_summary=None):
         if stored and stored.get("run_id") == runtime.get("run_id"):
             stored["finished"] = True
             del auto_runtime[token]
-    finish_run_log(token, runtime.get("log_id") or runtime.get("run_id"), {
+    finish_log(token, runtime.get("log_id") or runtime.get("run_id"), {
         **summary,
         "type": "auto",
         "status": status,
@@ -1289,7 +1050,7 @@ def start_auto_run(token, reason="schedule"):
             return False, "自动任务未启用"
         run_id = f"auto_{int(time.time())}_{id(config)}"
         started_at = time.time()
-        log_id = start_run_log(token, {
+        log_id = start_log(token, {
             "id": run_id,
             "type": "auto",
             "status": "running",
@@ -1579,7 +1340,7 @@ def run_check(session_id, proxies, rounds=None, target_profile=None, max_concurr
             results = list(s.get("results", []))
             valid, unstable, invalid = runtime_counts(results)
             status = "stopped" if stop_event.is_set() else "completed"
-            finish_run_log(token, s.get("log_id") or session_id, {
+            finish_log(token, s.get("log_id") or session_id, {
                 "type": "manual",
                 "status": status,
                 "session_id": session_id,
@@ -1594,6 +1355,214 @@ def run_check(session_id, proxies, rounds=None, target_profile=None, max_concurr
                 "unstable_count": unstable,
                 "invalid_count": invalid,
             })
+
+# ============================================================
+# Proxy Gateway
+# ============================================================
+class ThreadingTCPServer(ThreadingMixIn, TCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+class ProxyGatewayHandler(StreamRequestHandler):
+    timeout = PROXY_GATEWAY_TIMEOUT
+
+    def handle(self):
+        try:
+            request_line = self.rfile.readline(65536)
+            if not request_line:
+                return
+            headers = self._read_headers()
+            parts = request_line.decode("iso-8859-1", errors="replace").strip().split()
+            if len(parts) < 3:
+                self._send_gateway_error(400, "Bad Request")
+                return
+            method, target, version = parts[0].upper(), parts[1], parts[2]
+            if method == "CONNECT":
+                self._handle_connect(target, version, headers)
+            else:
+                self._handle_http(method, target, version, headers)
+        except Exception as exc:
+            log.warning("Proxy gateway request failed", extra={"error": str(exc)})
+
+    def _read_headers(self):
+        headers = []
+        while True:
+            line = self.rfile.readline(65536)
+            if not line or line in (b"\r\n", b"\n"):
+                break
+            headers.append(line)
+        return headers
+
+    def _headers_to_dict(self, headers):
+        out = {}
+        for raw in headers:
+            text = raw.decode("iso-8859-1", errors="replace")
+            if ":" not in text:
+                continue
+            key, value = text.split(":", 1)
+            out[key.strip().lower()] = value.strip()
+        return out
+
+    def _send_gateway_error(self, code, reason):
+        body = f"{code} {reason}\n".encode("utf-8")
+        response = (
+            f"HTTP/1.1 {code} {reason}\r\n"
+            "Connection: close\r\n"
+            "Content-Type: text/plain; charset=utf-8\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "\r\n"
+        ).encode("ascii") + body
+        try:
+            self.wfile.write(response)
+        except Exception:
+            pass
+
+    def _open_upstream(self, upstream):
+        sock = socket.create_connection((upstream["host"], upstream["port"]), timeout=PROXY_GATEWAY_TIMEOUT)
+        sock.settimeout(PROXY_GATEWAY_TIMEOUT)
+        if upstream["scheme"] == "https":
+            context = ssl.create_default_context()
+            sock = context.wrap_socket(sock, server_hostname=upstream["host"])
+            sock.settimeout(PROXY_GATEWAY_TIMEOUT)
+        return sock
+
+    def _read_upstream_headers(self, sock):
+        data = b""
+        while b"\r\n\r\n" not in data and len(data) < 65536:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+        return data
+
+    def _connect_via_upstream(self, upstream, target):
+        sock = self._open_upstream(upstream)
+        request = (
+            f"CONNECT {target} HTTP/1.1\r\n"
+            f"Host: {target}\r\n"
+            "Proxy-Connection: keep-alive\r\n"
+            f"{upstream['auth']}"
+            "\r\n"
+        ).encode("iso-8859-1")
+        sock.sendall(request)
+        response = self._read_upstream_headers(sock)
+        first_line = response.split(b"\r\n", 1)[0]
+        if b" 200 " not in first_line:
+            try:
+                sock.close()
+            except Exception:
+                pass
+            return None, response or first_line
+        return sock, response
+
+    def _relay(self, sock):
+        sockets = [self.connection, sock]
+        for item in sockets:
+            item.setblocking(False)
+        try:
+            while True:
+                readable, _, exceptional = select.select(sockets, [], sockets, PROXY_GATEWAY_TIMEOUT)
+                if exceptional or not readable:
+                    break
+                for source in readable:
+                    try:
+                        chunk = source.recv(65536)
+                    except (BlockingIOError, InterruptedError):
+                        continue
+                    if not chunk:
+                        return
+                    target = sock if source is self.connection else self.connection
+                    target.sendall(chunk)
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+    def _handle_connect(self, target, version, headers):
+        if ":" not in target:
+            target = f"{target}:443"
+        last_error = None
+        for upstream in ordered_proxy_gateway_candidates():
+            try:
+                sock, response = self._connect_via_upstream(upstream, target)
+                if sock:
+                    self.wfile.write(response)
+                    self._relay(sock)
+                    return
+                last_error = response.decode("iso-8859-1", errors="replace").splitlines()[0] if response else "upstream rejected CONNECT"
+            except Exception as exc:
+                last_error = str(exc)
+        log.warning("Proxy gateway CONNECT failed", extra={"target": target, "error": last_error})
+        self._send_gateway_error(502, "No Available Upstream Proxy")
+
+    def _handle_http(self, method, target, version, headers):
+        header_map = self._headers_to_dict(headers)
+        host = header_map.get("host")
+        if not target.startswith(("http://", "https://")):
+            if not host:
+                self._send_gateway_error(400, "Missing Host Header")
+                return
+            target = f"http://{host}{target}"
+
+        body = b""
+        try:
+            content_length = int(header_map.get("content-length", "0"))
+        except ValueError:
+            content_length = 0
+        if content_length > 0:
+            body = self.rfile.read(content_length)
+
+        filtered_headers = []
+        for line in headers:
+            lower = line.decode("iso-8859-1", errors="replace").split(":", 1)[0].strip().lower()
+            if lower in ("connection", "proxy-authorization", "proxy-connection"):
+                continue
+            filtered_headers.append(line)
+
+        request_head = (
+            f"{method} {target} {version}\r\n"
+            + b"".join(filtered_headers).decode("iso-8859-1", errors="replace")
+            + "Connection: close\r\n"
+        )
+
+        last_error = None
+        for upstream in ordered_proxy_gateway_candidates():
+            try:
+                sock = self._open_upstream(upstream)
+                payload = request_head + upstream["auth"] + "\r\n"
+                sock.sendall(payload.encode("iso-8859-1") + body)
+                self._relay(sock)
+                return
+            except Exception as exc:
+                last_error = str(exc)
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+        log.warning("Proxy gateway HTTP failed", extra={"target": target, "error": last_error})
+        self._send_gateway_error(502, "No Available Upstream Proxy")
+
+
+def start_proxy_gateway():
+    if not PROXY_GATEWAY_ENABLED:
+        log.info("Proxy gateway disabled")
+        return None
+    if PROXY_GATEWAY_PORT <= 0:
+        log.info("Proxy gateway disabled by port")
+        return None
+    try:
+        server = ThreadingTCPServer((PROXY_GATEWAY_BIND, PROXY_GATEWAY_PORT), ProxyGatewayHandler)
+    except Exception as exc:
+        log.error("Proxy gateway failed to start", extra={"bind": PROXY_GATEWAY_BIND, "port": PROXY_GATEWAY_PORT, "error": str(exc)})
+        return None
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    log.info(
+        f"Proxy gateway running at http://{PROXY_GATEWAY_BIND}:{PROXY_GATEWAY_PORT} "
+        f"with grades {','.join(sorted(proxy_gateway_grade_set()))}"
+    )
+    return server
 
 # ============================================================
 # HTTP Server
@@ -1655,7 +1624,7 @@ class Handler(SimpleHTTPRequestHandler):
         # Serve checked proxies as txt: /api/checked/<token>.txt
         if path.startswith("/api/checked/") and path.endswith(".txt"):
             token = path.split("/")[-1].replace(".txt", "")
-            checked_file = os.path.join(CHECKED_DIR, f"{token}.txt")
+            checked_file = checked_txt_path(token)
             if os.path.isfile(checked_file):
                 with open(checked_file, "r") as f:
                     content = f.read()
@@ -1759,12 +1728,12 @@ class Handler(SimpleHTTPRequestHandler):
 
             elif self.path == "/api/logs/list":
                 token = sanitize_token(body.get("token", "default"))
-                self._json(200, run_logs_payload(token))
+                self._json(200, logs_payload(token))
 
             elif self.path == "/api/logs/clear":
                 token = sanitize_token(body.get("token", "default"))
-                clear_run_logs(token)
-                self._json(200, {"ok": True, **run_logs_payload(token)})
+                clear_logs(token)
+                self._json(200, {"ok": True, **logs_payload(token)})
 
             elif self.path == "/api/start":
                 proxies = body.get("proxies", [])
@@ -1776,7 +1745,7 @@ class Handler(SimpleHTTPRequestHandler):
                     self._json(200, {"error": "自动任务正在执行，请先停止自动任务", "auto_running": True})
                     return
                 sid = str(time.time()) + str(id(proxies))
-                log_id = start_run_log(token, {
+                log_id = start_log(token, {
                     "id": sid,
                     "type": "manual",
                     "status": "running",
@@ -1926,30 +1895,17 @@ class Handler(SimpleHTTPRequestHandler):
 
             elif self.path == "/api/checked/save":
                 proxies = body.get("proxies", [])
-                token = body.get("token", "default")
-                if not token.replace("_","").isalnum():
-                    token = "default"
-                checked_file = os.path.join(CHECKED_DIR, f"{token}.txt")
-                with open(checked_file, "w") as f:
-                    f.write("\n".join(proxies))
-                log.info(f"Checked proxies saved: token={token}, count={len(proxies)}")
-                self._json(200, {"ok": True, "count": len(proxies)})
+                token = sanitize_token(body.get("token", "default"))
+                saved = write_checked_list(token, proxies)
+                log.info(f"Checked proxies saved: token={token}, count={len(saved)}")
+                self._json(200, {"ok": True, "count": len(saved)})
 
             elif self.path == "/api/checked/filter":
                 # Given a list of proxies, return which ones are NOT yet checked
                 proxies = body.get("proxies", [])
-                token = body.get("token", "default")
-                if not token.replace("_","").isalnum():
-                    token = "default"
-                checked_file = os.path.join(CHECKED_DIR, f"{token}.txt")
-                checked_set = set()
-                if os.path.isfile(checked_file):
-                    with open(checked_file, "r") as f:
-                        for line in f:
-                            line = line.strip()
-                            if line:
-                                checked_set.add(line.lower())
-                unchecked = [p for p in proxies if p.lower() not in checked_set]
+                token = sanitize_token(body.get("token", "default"))
+                checked_set = {proxy_key(proxy) for proxy in read_checked_list(token)}
+                unchecked = [p for p in proxies if proxy_key(p) not in checked_set]
                 skipped = len(proxies) - len(unchecked)
                 self._json(200, {
                     "unchecked": unchecked,
@@ -2001,6 +1957,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     start_auto_scheduler()
+    start_proxy_gateway()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     log.info(f"Proxy Checker running at http://0.0.0.0:{PORT}")
     log.info(f"Deep check (nodriver): {'available' if NODRIVER_AVAILABLE else 'not installed'}")

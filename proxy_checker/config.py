@@ -1,0 +1,111 @@
+import json
+import os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONFIG_LOCAL_PATH = os.path.join(BASE_DIR, "config.local.json")
+
+
+def load_config():
+    config = {}
+    for name in ("config.json", "config.local.json"):
+        path = os.path.join(BASE_DIR, name)
+        if not os.path.isfile(path):
+            continue
+        with open(path, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            config.update(loaded)
+    return config
+
+
+CONFIG = load_config()
+
+
+def get_config_value(key, env_name, default):
+    if env_name in os.environ:
+        return os.environ[env_name]
+    return CONFIG.get(key, default)
+
+
+def get_config_int(key, env_name, default):
+    try:
+        return int(get_config_value(key, env_name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def get_config_bool(key, env_name, default):
+    value = get_config_value(key, env_name, default)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def runtime_dir(name):
+    path = os.path.join(BASE_DIR, name)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+REPO_DIR = runtime_dir("repo_data")
+CHECKED_DIR = runtime_dir("checked_data")
+AUTO_DIR = runtime_dir("auto_data")
+LOG_DIR = runtime_dir("logs")
+
+REPO_UPDATE_POLICIES = (
+    "stable_only",
+    "include_unstable",
+    "archive_all",
+    "grade_a_only",
+    "grade_b_only",
+    "grade_ab_only",
+)
+
+TIMEZONE_OPTIONS = (
+    {"id": "UTC", "name": "UTC"},
+    {"id": "Asia/Shanghai", "name": "中国/新加坡/马来西亚 UTC+8"},
+    {"id": "Asia/Tokyo", "name": "日本/韩国 UTC+9"},
+    {"id": "Asia/Bangkok", "name": "泰国/越南 UTC+7"},
+    {"id": "Asia/Dubai", "name": "迪拜 UTC+4"},
+    {"id": "Europe/London", "name": "伦敦"},
+    {"id": "Europe/Berlin", "name": "欧洲中部"},
+    {"id": "America/New_York", "name": "美国东部"},
+    {"id": "America/Chicago", "name": "美国中部"},
+    {"id": "America/Denver", "name": "美国山地"},
+    {"id": "America/Los_Angeles", "name": "美国西部"},
+    {"id": "Australia/Sydney", "name": "悉尼"},
+)
+TIMEZONE_IDS = {item["id"] for item in TIMEZONE_OPTIONS}
+
+TIMEOUT = get_config_int("timeout", "TIMEOUT", 12)
+DETECT_TIMEOUT = get_config_int("detect_timeout", "DETECT_TIMEOUT", 8)
+MAX_CONCURRENT = get_config_int("max_concurrent", "MAX_CONCURRENT", 30)
+MAX_CONCURRENT_LIMIT = get_config_int("max_concurrent_limit", "MAX_CONCURRENT_LIMIT", 200)
+CHECK_ROUNDS = get_config_int("check_rounds", "CHECK_ROUNDS", 2)
+MAX_CHECK_ROUNDS = get_config_int("max_check_rounds", "MAX_CHECK_ROUNDS", 3)
+LOG_LIMIT = get_config_int("log_limit", "LOG_LIMIT", 100)
+PORT = get_config_int("port", "PORT", 8888)
+
+PROXY_GATEWAY_ENABLED = get_config_bool("proxy_gateway_enabled", "PROXY_GATEWAY_ENABLED", True)
+PROXY_GATEWAY_BIND = str(get_config_value("proxy_gateway_bind", "PROXY_GATEWAY_BIND", "127.0.0.1"))
+PROXY_GATEWAY_PORT = get_config_int("proxy_gateway_port", "PROXY_GATEWAY_PORT", 7890)
+PROXY_GATEWAY_TOKEN = str(get_config_value("proxy_gateway_token", "PROXY_GATEWAY_TOKEN", "")).strip()
+PROXY_GATEWAY_GRADES = str(get_config_value("proxy_gateway_grades", "PROXY_GATEWAY_GRADES", "A,B"))
+PROXY_GATEWAY_TIMEOUT = max(3, get_config_int("proxy_gateway_timeout", "PROXY_GATEWAY_TIMEOUT", 20))
+
+AUTH_PASSWORD = str(get_config_value("auth_password", "AUTH_PASSWORD", "linux.do"))
+AUTH_SESSION_DAYS = get_config_int("auth_session_days", "AUTH_SESSION_DAYS", 7)
+AUTH_COOKIE_NAME = "proxy_checker_auth"
+AUTH_SESSION_SECONDS = max(1, AUTH_SESSION_DAYS) * 86400
+AUTH_SESSION_SECRET = str(get_config_value("auth_session_secret", "AUTH_SESSION_SECRET", AUTH_PASSWORD))
+
+APP_TIMEZONE = str(get_config_value("timezone", "APP_TIMEZONE", "UTC"))
+MAX_CHECK_ROUNDS = max(1, min(10, MAX_CHECK_ROUNDS))
+CHECK_ROUNDS = max(1, min(MAX_CHECK_ROUNDS, CHECK_ROUNDS))
+LOG_LIMIT = max(20, min(1000, LOG_LIMIT))
+if APP_TIMEZONE not in TIMEZONE_IDS:
+    APP_TIMEZONE = "UTC"
+
+LOG_FILE_PATH = str(get_config_value("log_file", "LOG_FILE", os.path.join(BASE_DIR, "server.log")))
+if not os.path.isabs(LOG_FILE_PATH):
+    LOG_FILE_PATH = os.path.join(BASE_DIR, LOG_FILE_PATH)

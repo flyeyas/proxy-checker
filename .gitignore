@@ -15,7 +15,7 @@ node_modules/
 repo_data/
 checked_data/
 auto_data/
-run_logs/
+logs/
 patch_*.py
 fix_*.py
 *.bak2

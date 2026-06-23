@@ -151,7 +151,7 @@ def main() -> None:
         "function processAutoRealtimeResults(",
         "function maybePromptAutoStoppedRepo(",
         "function openAppSettings()",
-        "function openRunLogs()",
+        "function openLogs()",
         "target_profile",
     ):
         if expected not in app_js:
@@ -164,8 +164,8 @@ def main() -> None:
         raise AssertionError("index.html missing auto status badge")
     if 'openAppSettings()' not in index_html:
         raise AssertionError("index.html missing settings button")
-    if 'openRunLogs()' not in index_html:
-        raise AssertionError("index.html missing run logs button")
+    if 'openLogs()' not in index_html:
+        raise AssertionError("index.html missing logs button")
     if 'id="authOverlay"' not in index_html:
         raise AssertionError("index.html missing auth overlay")
 

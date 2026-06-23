@@ -66,7 +66,7 @@ MAX_CONCURRENT_LIMIT = get_config_int("max_concurrent_limit", "MAX_CONCURRENT_LI
 CHECK_ROUNDS = get_config_int("check_rounds", "CHECK_ROUNDS", 2)
 MAX_CHECK_ROUNDS = max(1, min(3, get_config_int("max_check_rounds", "MAX_CHECK_ROUNDS", 3)))
 CHECK_ROUNDS = max(1, min(MAX_CHECK_ROUNDS, CHECK_ROUNDS))
-RUN_LOG_LIMIT = get_config_int("run_log_limit", "RUN_LOG_LIMIT", 100)
+LOG_LIMIT = get_config_int("log_limit", "LOG_LIMIT", 100)
 APP_TIMEZONE = str(get_config_value("timezone", "APP_TIMEZONE", "UTC"))
 TIMEZONE_OPTIONS = (
     {"id": "UTC", "name": "UTC"},
@@ -122,7 +122,7 @@ def public_settings_payload():
         "timeout": TIMEOUT,
         "detect_timeout": DETECT_TIMEOUT,
         "auth_session_days": AUTH_SESSION_DAYS,
-        "run_log_limit": RUN_LOG_LIMIT,
+        "log_limit": LOG_LIMIT,
         "timezone": APP_TIMEZONE,
         "timezone_options": list(TIMEZONE_OPTIONS),
         "password_configurable": False,
