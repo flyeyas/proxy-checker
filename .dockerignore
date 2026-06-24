@@ -12,7 +12,7 @@ server.log
 repo_data/
 checked_data/
 auto_data/
-run_logs/
+logs/
 outputs/
 work/
 node_modules/

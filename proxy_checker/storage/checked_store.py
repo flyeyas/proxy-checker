@@ -2,11 +2,12 @@ import os
 
 from proxy_checker.config import CHECKED_DIR
 from proxy_checker.storage.files import atomic_write_text
-from proxy_checker.utils import normalize_proxy_list, proxy_key, sanitize_token
+from proxy_checker.storage.paths import token_file_path
+from proxy_checker.utils import normalize_proxy_list, proxy_key
 
 
 def checked_txt_path(token):
-    return os.path.join(CHECKED_DIR, f"{sanitize_token(token)}.txt")
+    return token_file_path(CHECKED_DIR, token, "txt")
 
 
 def read_checked_list(token):

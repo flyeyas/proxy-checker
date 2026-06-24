@@ -1,9 +1,9 @@
-import os
 import threading
 import time
 
 from proxy_checker.config import LOG_DIR, LOG_LIMIT
 from proxy_checker.storage.files import atomic_write_json, read_json_file
+from proxy_checker.storage.paths import token_file_path
 from proxy_checker.utils import sanitize_token
 
 _log_limit = LOG_LIMIT
@@ -20,7 +20,7 @@ def set_log_limit(limit):
 
 
 def log_json_path(token):
-    return os.path.join(LOG_DIR, f"{sanitize_token(token)}.json")
+    return token_file_path(LOG_DIR, token, "json")
 
 
 def compact_log(entry):

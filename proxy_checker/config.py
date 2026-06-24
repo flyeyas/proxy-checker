@@ -41,16 +41,25 @@ def get_config_bool(key, env_name, default):
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
-def runtime_dir(name):
-    path = os.path.join(BASE_DIR, name)
+def runtime_path(name):
+    return os.path.join(BASE_DIR, name)
+
+
+def ensure_runtime_dir(path):
     os.makedirs(path, exist_ok=True)
     return path
 
 
-REPO_DIR = runtime_dir("repo_data")
-CHECKED_DIR = runtime_dir("checked_data")
-AUTO_DIR = runtime_dir("auto_data")
-LOG_DIR = runtime_dir("logs")
+REPO_DIR = runtime_path("repo_data")
+CHECKED_DIR = runtime_path("checked_data")
+AUTO_DIR = runtime_path("auto_data")
+LOG_DIR = runtime_path("logs")
+
+
+def ensure_runtime_dirs():
+    for path in (REPO_DIR, CHECKED_DIR, AUTO_DIR, LOG_DIR):
+        ensure_runtime_dir(path)
+
 
 REPO_UPDATE_POLICIES = (
     "stable_only",
@@ -85,6 +94,7 @@ CHECK_ROUNDS = get_config_int("check_rounds", "CHECK_ROUNDS", 2)
 MAX_CHECK_ROUNDS = get_config_int("max_check_rounds", "MAX_CHECK_ROUNDS", 3)
 LOG_LIMIT = get_config_int("log_limit", "LOG_LIMIT", 100)
 PORT = get_config_int("port", "PORT", 8888)
+HTTP_THREADS = get_config_int("http_threads", "HTTP_THREADS", 16)
 
 PROXY_GATEWAY_ENABLED = get_config_bool("proxy_gateway_enabled", "PROXY_GATEWAY_ENABLED", True)
 PROXY_GATEWAY_BIND = str(get_config_value("proxy_gateway_bind", "PROXY_GATEWAY_BIND", "127.0.0.1"))
@@ -103,6 +113,7 @@ APP_TIMEZONE = str(get_config_value("timezone", "APP_TIMEZONE", "UTC"))
 MAX_CHECK_ROUNDS = max(1, min(10, MAX_CHECK_ROUNDS))
 CHECK_ROUNDS = max(1, min(MAX_CHECK_ROUNDS, CHECK_ROUNDS))
 LOG_LIMIT = max(20, min(1000, LOG_LIMIT))
+HTTP_THREADS = max(1, min(128, HTTP_THREADS))
 if APP_TIMEZONE not in TIMEZONE_IDS:
     APP_TIMEZONE = "UTC"
 

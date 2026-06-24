@@ -3,15 +3,16 @@ import time
 
 from proxy_checker.config import REPO_DIR
 from proxy_checker.storage.files import atomic_write_json, atomic_write_text, read_json_file
+from proxy_checker.storage.paths import token_file_path
 from proxy_checker.utils import proxy_key, sanitize_token
 
 
 def repo_json_path(token):
-    return os.path.join(REPO_DIR, f"{sanitize_token(token)}.json")
+    return token_file_path(REPO_DIR, token, "json")
 
 
 def repo_txt_path(token):
-    return os.path.join(REPO_DIR, f"{sanitize_token(token)}.txt")
+    return token_file_path(REPO_DIR, token, "txt")
 
 
 def compact_repo_item(item):

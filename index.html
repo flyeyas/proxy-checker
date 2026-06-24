@@ -43,9 +43,9 @@ textarea::placeholder{color:#555}
 .status-inline{display:inline-flex;align-items:center;color:#777;font-size:12px;white-space:nowrap}
 .card-status{max-width:520px;min-height:18px;overflow:hidden;text-overflow:ellipsis;text-align:right}
 .filter-bar{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
-.fbtn{padding:4px 10px;border:1px solid rgba(255,255,255,.1);border-radius:20px;background:transparent;color:#888;font-size:11px;cursor:pointer;transition:all .2s}
-.fbtn.active{border-color:#7c5cfc;color:#7c5cfc;background:rgba(124,92,252,.1)}
-.fbtn:hover{border-color:#7c5cfc;color:#aaa}
+.filter-btn{padding:4px 10px;border:1px solid rgba(255,255,255,.1);border-radius:20px;background:transparent;color:#888;font-size:11px;cursor:pointer;transition:all .2s}
+.filter-btn.active{border-color:#7c5cfc;color:#7c5cfc;background:rgba(124,92,252,.1)}
+.filter-btn:hover{border-color:#7c5cfc;color:#aaa}
 .result-list{max-height:420px;overflow-y:auto;contain:content}
 .result-list::-webkit-scrollbar{width:6px}
 .result-list::-webkit-scrollbar-track{background:transparent}
@@ -274,14 +274,14 @@ textarea::-webkit-scrollbar-thumb:hover{background:rgba(124,92,252,.5)}
 
 <div class="stats-panel">
 <div class="stats-row">
-<div class="stat"><div class="stat-num" id="sTotal">0</div><div class="stat-label">总计</div></div>
-<div class="stat"><div class="stat-num" id="sValid" style="color:#22c55e">0</div><div class="stat-label">稳定(2/2)</div></div>
-<div class="stat"><div class="stat-num" id="sUnstable" style="color:#eab308">0</div><div class="stat-label">不稳定(1/2)</div></div>
-<div class="stat"><div class="stat-num" id="sInvalid" style="color:#ef4444">0</div><div class="stat-label">失效</div></div>
-<div class="stat"><div class="stat-num" id="sCfBypass" style="color:#10b981">0</div><div class="stat-label">服务可达</div></div>
-<div class="stat"><div class="stat-num" id="sApiReachable" style="color:#60a5fa">0</div><div class="stat-label">API域名</div></div>
-<div class="stat"><div class="stat-num" id="sRate" style="color:#eab308">0%</div><div class="stat-label">稳定率</div></div>
-<div class="stat"><div class="stat-num" id="sRounds">2轮</div><div class="stat-label">检测轮数</div></div>
+<div class="stat"><div class="stat-num" id="totalStat">0</div><div class="stat-label">总计</div></div>
+<div class="stat"><div class="stat-num" id="stableStat" style="color:#22c55e">0</div><div class="stat-label">稳定(2/2)</div></div>
+<div class="stat"><div class="stat-num" id="unstableStat" style="color:#eab308">0</div><div class="stat-label">不稳定(1/2)</div></div>
+<div class="stat"><div class="stat-num" id="invalidStat" style="color:#ef4444">0</div><div class="stat-label">失效</div></div>
+<div class="stat"><div class="stat-num" id="cfBypassStat" style="color:#10b981">0</div><div class="stat-label">服务可达</div></div>
+<div class="stat"><div class="stat-num" id="apiReachableStat" style="color:#60a5fa">0</div><div class="stat-label">API域名</div></div>
+<div class="stat"><div class="stat-num" id="stableRateStat" style="color:#eab308">0%</div><div class="stat-label">稳定率</div></div>
+<div class="stat"><div class="stat-num" id="roundsStat">2轮</div><div class="stat-label">检测轮数</div></div>
 </div>
 </div>
 
@@ -289,8 +289,8 @@ textarea::-webkit-scrollbar-thumb:hover{background:rgba(124,92,252,.5)}
 <div class="card" id="resultCard">
 <div class="card-head" style="padding:0;border-bottom:none">
 <div class="result-tabs">
-<button class="result-tab active" onclick="switchTab('valid')" id="tabBtnValid">&#9989; 有效代理 <span class="tab-count" id="vCount">0</span></button>
-<button class="result-tab" onclick="switchTab('invalid')" id="tabBtnInvalid">&#10060; 失效代理 <span class="tab-count" id="fCount">0</span></button>
+<button class="result-tab active" onclick="switchTab('valid')" id="tabBtnValid">&#9989; 有效代理 <span class="tab-count" id="validTabCount">0</span></button>
+<button class="result-tab" onclick="switchTab('invalid')" id="tabBtnInvalid">&#10060; 失效代理 <span class="tab-count" id="invalidTabCount">0</span></button>
 <button class="result-tab" onclick="switchTab('repo')" id="tabBtnRepo">&#128230; 我的仓库 <span class="tab-count" id="repoCount">0</span></button>
 </div>
 </div>
@@ -300,15 +300,15 @@ textarea::-webkit-scrollbar-thumb:hover{background:rgba(124,92,252,.5)}
 <!-- Tab: 有效代理 -->
 <div class="tab-panel active" id="tabValid">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px">
-<div class="filter-bar" id="vFilters" style="margin-bottom:0">
-<button class="fbtn active" data-f="all">🔎 全部</button>
-<button class="fbtn" data-f="stable">✅ 稳定</button>
-<button class="fbtn" data-f="unstable">⚠️ 不稳定</button>
-<button class="fbtn" id="filterServiceBtn" data-f="cf_bypass">🌐 服务可达</button>
-<button class="fbtn" id="filterApiBtn" data-f="api_or_ip">🔌 出口IP</button>
-<button class="fbtn" data-f="fast">⚡ &lt;1秒</button>
-<button class="fbtn" data-f="mid">⏱️ 1-3秒</button>
-<button class="fbtn" data-f="slow">⏳ &gt;3秒</button>
+<div class="filter-bar" id="validFilters" style="margin-bottom:0">
+<button class="filter-btn active" data-f="all">🔎 全部</button>
+<button class="filter-btn" data-f="stable">✅ 稳定</button>
+<button class="filter-btn" data-f="unstable">⚠️ 不稳定</button>
+<button class="filter-btn" id="filterServiceBtn" data-f="cf_bypass">🌐 服务可达</button>
+<button class="filter-btn" id="filterApiBtn" data-f="api_or_ip">🔌 出口IP</button>
+<button class="filter-btn" data-f="fast">⚡ &lt;1秒</button>
+<button class="filter-btn" data-f="mid">⏱️ 1-3秒</button>
+<button class="filter-btn" data-f="slow">⏳ &gt;3秒</button>
 </div>
 <div style="display:flex;gap:6px;align-items:center">
 <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;color:#ef4444;border-color:rgba(239,68,68,.3)" onclick="clearValid()">&#129529; 清空</button>
@@ -325,34 +325,34 @@ textarea::-webkit-scrollbar-thumb:hover{background:rgba(124,92,252,.5)}
 </div>
 </div>
 </div>
-<div class="result-list" id="validList"><div class="empty">等待检测...</div></div>
+<div class="result-list" id="validResultsList"><div class="empty">等待检测...</div></div>
 </div>
 
 <!-- Tab: 失效代理 -->
 <div class="tab-panel" id="tabInvalid">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px">
-<div class="filter-bar" id="fFilters" style="margin-bottom:0">
-<button class="fbtn active" data-f="all">🔎 全部</button>
-<button class="fbtn" data-f="timeout">⏱️ 超时</button>
-<button class="fbtn" data-f="cf_block">🛡️ 网页CF拦截</button>
-<button class="fbtn" data-f="conn">🔌 连接错误</button>
-<button class="fbtn" data-f="other">❔ 其他</button>
+<div class="filter-bar" id="invalidFilters" style="margin-bottom:0">
+<button class="filter-btn active" data-f="all">🔎 全部</button>
+<button class="filter-btn" data-f="timeout">⏱️ 超时</button>
+<button class="filter-btn" data-f="cf_block">🛡️ 网页CF拦截</button>
+<button class="filter-btn" data-f="conn">🔌 连接错误</button>
+<button class="filter-btn" data-f="other">❔ 其他</button>
 </div>
 <div style="display:flex;gap:6px;align-items:center">
-<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;color:#ef4444;border-color:rgba(239,68,68,.3)" onclick="clearFailed()">&#129529; 清空</button>
-<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="copyFailedProxies()">📋 复制全部</button>
+<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;color:#ef4444;border-color:rgba(239,68,68,.3)" onclick="clearInvalid()">&#129529; 清空</button>
+<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="copyInvalidProxies()">📋 复制全部</button>
 </div>
 </div>
-<div class="result-list" id="failList"><div class="empty">等待检测...</div></div>
+<div class="result-list" id="invalidResultsList"><div class="empty">等待检测...</div></div>
 </div>
 
 <!-- Tab: 我的仓库 -->
 <div class="tab-panel" id="tabRepo">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:6px;flex-wrap:wrap">
 <div class="filter-bar" id="repoFilters" style="margin-bottom:0">
-<button class="fbtn active" data-f="all">🔎 全部</button>
+<button class="filter-btn active" data-f="all">🔎 全部</button>
 <div class="grade-dropdown" id="repoGradeDropdown">
-<button class="fbtn" id="repoGradeFilterBtn" data-f="grade_all" onclick="toggleRepoGradeMenu()">🏅 等级筛选 ▾</button>
+<button class="filter-btn" id="repoGradeFilterBtn" data-f="grade_all" onclick="toggleRepoGradeMenu()">🏅 等级筛选 ▾</button>
 <div class="grade-menu" id="repoGradeMenu">
 <div class="grade-menu-item" onclick="setRepoGradeFilter('grade_a','等级A')"><span class="grade-dot" style="background:#22c55e"></span>等级 A</div>
 <div class="grade-menu-item" onclick="setRepoGradeFilter('grade_b','等级B')"><span class="grade-dot" style="background:#10b981"></span>等级 B</div>
@@ -360,12 +360,12 @@ textarea::-webkit-scrollbar-thumb:hover{background:rgba(124,92,252,.5)}
 <div class="grade-menu-item" onclick="setRepoGradeFilter('grade_d','等级D')"><span class="grade-dot" style="background:#f97316"></span>等级 D</div>
 </div>
 </div>
-<button class="fbtn" data-f="service">🌐 服务可达</button>
-<button class="fbtn" data-f="api">🔌 API域名可达</button>
-<button class="fbtn" data-f="cf">🛡️ 网页CF未拦截</button>
-<button class="fbtn" data-f="dc">🏢 机房</button>
-<button class="fbtn" data-f="res">🏠 住宅</button>
-<button class="fbtn" data-f="country">🌍 有国家</button>
+<button class="filter-btn" data-f="service">🌐 服务可达</button>
+<button class="filter-btn" data-f="api">🔌 API域名可达</button>
+<button class="filter-btn" data-f="cf">🛡️ 网页CF未拦截</button>
+<button class="filter-btn" data-f="dc">🏢 机房</button>
+<button class="filter-btn" data-f="res">🏠 住宅</button>
+<button class="filter-btn" data-f="country">🌍 有国家</button>
 </div>
 <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
 <div class="fetch-dropdown" id="repoClearDropdown">
