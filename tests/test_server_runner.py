@@ -1,61 +1,33 @@
-import builtins
+import sys
 import unittest
 from unittest.mock import patch
 
-from proxy_checker.http.server_runner import serve_flask_http, serve_legacy_http
-
 
 class ServerRunnerTest(unittest.TestCase):
-    def test_serve_legacy_http_builds_server_and_runs_forever(self):
+    def test_serve_flask_http_serves_via_waitress(self):
+        app = object()
         logger = FakeLogger()
-        server_class = FakeServerClass()
+        served = {}
 
-        serve_legacy_http(8888, lambda: "handler", logger, server_class)
+        def fake_serve(app_arg, *, host, port, threads):
+            served["app"] = app_arg
+            served["host"] = host
+            served["port"] = port
+            served["threads"] = threads
 
-        self.assertEqual(server_class.address, ("0.0.0.0", 8888))
-        self.assertEqual(server_class.handler, "handler")
-        self.assertTrue(server_class.server.served)
-        self.assertIn("legacy HTTP server", logger.messages[0])
+        fake_waitress = type(sys)("waitress")
+        fake_waitress.serve = fake_serve
 
-    def test_serve_flask_http_falls_back_when_waitress_missing(self):
-        called = []
+        from proxy_checker.http.server_runner import serve_flask_http
 
-        def fake_import(name, *args, **kwargs):
-            if name == "waitress":
-                raise ImportError("missing")
-            return original_import(name, *args, **kwargs)
+        with patch.dict(sys.modules, {"waitress": fake_waitress}):
+            serve_flask_http(lambda: app, port=8888, threads=4, logger=logger)
 
-        original_import = builtins.__import__
-        with patch("builtins.__import__", side_effect=fake_import):
-            serve_flask_http(
-                lambda: object(),
-                port=8888,
-                threads=4,
-                logger=FakeLogger(),
-                legacy_server=lambda: called.append(True),
-            )
-
-        self.assertEqual(called, [True])
-
-
-class FakeServerClass:
-    def __call__(self, address, handler, logger=None):
-        self.address = address
-        self.handler = handler
-        self.logger = logger
-        self.server = FakeServer()
-        return self.server
-
-
-class FakeServer:
-    def __init__(self):
-        self.served = False
-
-    def serve_forever(self):
-        self.served = True
-
-    def server_close(self):
-        pass
+        self.assertIs(served["app"], app)
+        self.assertEqual(served["host"], "0.0.0.0")
+        self.assertEqual(served["port"], 8888)
+        self.assertEqual(served["threads"], 4)
+        self.assertTrue(any("8888" in message for message in logger.messages))
 
 
 class FakeLogger:

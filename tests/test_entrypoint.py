@@ -19,11 +19,9 @@ class EntrypointConfigTest(unittest.TestCase):
         self.assertIn("waitress", requirements)
         self.assertIn("from waitress import serve", runner)
         self.assertIn("serve(app, host=\"0.0.0.0\", port=port, threads=threads)", runner)
-        self.assertIn("legacy_server()", runner)
         self.assertIn("services.lifecycle_service.start_background_services()", server)
         self.assertIn("services.http_service.serve_flask_http()", server)
         self.assertIn("run_flask_http(", runtime_http)
-        self.assertIn("run_legacy_http(", runtime_http)
 
 
 if __name__ == "__main__":

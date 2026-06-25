@@ -20,14 +20,6 @@ def create_runtime_flask_app():
     return services.http_service.create_flask_app()
 
 
-def build_legacy_handler():
-    return services.http_service.build_legacy_handler()
-
-
-def serve_legacy_http():
-    return services.http_service.serve_legacy_http()
-
-
 def serve_flask_http():
     return services.http_service.serve_flask_http()
 

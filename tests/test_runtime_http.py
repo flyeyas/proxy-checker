@@ -37,16 +37,6 @@ class RuntimeHttpServiceTest(unittest.TestCase):
         self.assertEqual(args[0], self.service.create_flask_app)
         self.assertEqual(kwargs["port"], 8888)
         self.assertEqual(kwargs["threads"], 16)
-        self.assertEqual(kwargs["legacy_server"], self.service.serve_legacy_http)
-
-    def test_serve_legacy_http_delegates_to_runner(self):
-        with patch("proxy_checker.http.runtime_http.run_legacy_http") as serve:
-            self.service.serve_legacy_http()
-
-        serve.assert_called_once()
-        args, _kwargs = serve.call_args
-        self.assertEqual(args[0], 8888)
-        self.assertEqual(args[1], self.service.build_legacy_handler)
 
     def test_create_runtime_http_service_wires_dependencies(self):
         deps = {

@@ -1,10 +1,9 @@
 from dataclasses import dataclass
 
 from proxy_checker.checking.engine import DEFAULT_TARGET_CHAT
-from proxy_checker.config import LOG_FILE_PATH
+from proxy_checker.config import LOG_FILE_PATH, Settings
 from proxy_checker.gateway.runtime_gateway import create_runtime_gateway_services
 from proxy_checker.http.runtime_http import create_runtime_http_service
-from proxy_checker.runtime_state import RuntimeState
 from proxy_checker.services.auth_service import create_runtime_auth_service
 from proxy_checker.services.deep_check_service import DeepCheckService
 from proxy_checker.services.fetch_service import ProxyFetchService
@@ -68,7 +67,7 @@ class RuntimeServices:
 
 
 def create_runtime_services():
-    state = RuntimeState.from_config()
+    state = Settings.load()
     log = configure_logging(LOG_FILE_PATH)
     target_chat = DEFAULT_TARGET_CHAT
     auth_service = create_runtime_auth_service(state)

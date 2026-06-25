@@ -3,26 +3,25 @@ import unittest
 from unittest.mock import patch
 
 from proxy_checker import config
-from proxy_checker.config import CHECK_ROUNDS, PORT
-from proxy_checker.runtime_state import RuntimeState
+from proxy_checker.config import CHECK_ROUNDS, PORT, Settings
 
 
-class RuntimeStateTest(unittest.TestCase):
+class SettingsTest(unittest.TestCase):
     def test_config_import_does_not_create_runtime_dirs(self):
         with patch("os.makedirs") as make_dirs:
             importlib.reload(config)
 
         make_dirs.assert_not_called()
 
-    def test_from_config_loads_runtime_defaults(self):
-        state = RuntimeState.from_config()
+    def test_load_reads_runtime_defaults(self):
+        state = Settings.load()
 
         self.assertEqual(state.port, PORT)
         self.assertEqual(state.check_rounds, CHECK_ROUNDS)
         self.assertGreaterEqual(state.http_threads, 1)
 
     def test_settings_context_and_apply_resolved_settings(self):
-        state = RuntimeState.from_config()
+        state = Settings.load()
         context = state.settings_context()
 
         self.assertEqual(context["timeout"], state.timeout)
