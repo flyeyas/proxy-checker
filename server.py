@@ -1,43 +1,40 @@
-from proxy_checker.runtime import create_runtime
+from proxy_checker.runtime_services import create_runtime_services
 
 
-runtime = create_runtime()
+services = create_runtime_services()
 
 
 def public_settings_payload():
-    return runtime.public_settings_payload()
+    return services.settings_payload_service.public_settings()
 
 
 def runtime_config_payload():
-    return runtime.runtime_config_payload()
-
-
-def apply_runtime_settings(settings):
-    return runtime.apply_runtime_settings(settings)
+    return services.settings_payload_service.runtime_config()
 
 
 def start_proxy_gateway():
-    return runtime.start_proxy_gateway()
+    return services.gateway_runtime_service.start()
 
 
 def create_runtime_flask_app():
-    return runtime.create_flask_app()
+    return services.http_service.create_flask_app()
 
 
 def build_legacy_handler():
-    return runtime.build_legacy_handler()
+    return services.http_service.build_legacy_handler()
 
 
 def serve_legacy_http():
-    return runtime.serve_legacy_http()
+    return services.http_service.serve_legacy_http()
 
 
 def serve_flask_http():
-    return runtime.serve_flask_http()
+    return services.http_service.serve_flask_http()
 
 
 def main():
-    runtime.main()
+    services.lifecycle_service.start_background_services()
+    services.http_service.serve_flask_http()
 
 
 if __name__ == "__main__":

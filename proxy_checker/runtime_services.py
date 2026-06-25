@@ -25,14 +25,22 @@ from proxy_checker.services.session_cleanup_service import SessionCleanupService
 from proxy_checker.services.session_service import InMemorySessionStore
 
 
+class EngineRef:
+    def __init__(self, engine):
+        self.engine = engine
+
+    def get(self):
+        return self.engine
+
+
 @dataclass(frozen=True)
 class RuntimeServices:
     state: object
     log: object
     target_chat: str
+    engine_ref: object
     auth_service: object
     check_engine_factory: object
-    check_engine: object
     check_sessions: object
     proxy_gateway_service: object
     gateway_runtime_service: object
@@ -54,14 +62,23 @@ class RuntimeServices:
     lifecycle_service: object
     http_service: object
 
+    @property
+    def check_engine(self):
+        return self.engine_ref.get()
 
-def create_runtime_services(*, apply_runtime_settings, check_engine_provider):
+
+def create_runtime_services():
     state = RuntimeState.from_config()
     log = configure_logging(LOG_FILE_PATH)
     target_chat = DEFAULT_TARGET_CHAT
     auth_service = create_runtime_auth_service(state)
     check_engine_factory = RuntimeCheckEngineFactory(state)
-    check_engine = check_engine_factory.create()
+    engine_ref = EngineRef(check_engine_factory.create())
+
+    def apply_runtime_settings(settings):
+        password_changed, new_engine = runtime_settings_apply_service.apply(settings)
+        engine_ref.engine = new_engine
+        return password_changed
 
     check_sessions = InMemorySessionStore()
     gateway_services = create_runtime_gateway_services(state=state, logger=log)
@@ -100,7 +117,7 @@ def create_runtime_services(*, apply_runtime_settings, check_engine_provider):
         state=state,
         runtime_options_service=runtime_options_service,
         fetch_service=proxy_fetch_service,
-        check_engine_provider=check_engine_provider,
+        check_engine_provider=engine_ref.get,
         repo_update_service=repo_update_service,
         logger=log,
     )
@@ -108,7 +125,7 @@ def create_runtime_services(*, apply_runtime_settings, check_engine_provider):
         state=state,
         session_store=check_sessions,
         auto_runtime_store=auto_services.runtime_store,
-        check_engine_provider=check_engine_provider,
+        check_engine_provider=engine_ref.get,
         runtime_options_service=runtime_options_service,
         logger=log,
     )
@@ -138,9 +155,9 @@ def create_runtime_services(*, apply_runtime_settings, check_engine_provider):
         state=state,
         log=log,
         target_chat=target_chat,
+        engine_ref=engine_ref,
         auth_service=auth_service,
         check_engine_factory=check_engine_factory,
-        check_engine=check_engine,
         check_sessions=check_sessions,
         proxy_gateway_service=proxy_gateway_service,
         gateway_runtime_service=gateway_runtime_service,
