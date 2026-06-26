@@ -1,4 +1,4 @@
-from proxy_checker.storage.auto_store import read_auto_payload, write_auto_payload
+from proxy_checker.storage.tenant import create_tenant_storage_factory
 from proxy_checker.utils import sanitize_token
 
 
@@ -12,6 +12,7 @@ class AutoRecordService:
         format_timestamp,
         server_time_payload,
         count_results,
+        storage_factory=None,
     ):
         self.normalize_config = normalize_config
         self.default_state = default_state
@@ -19,10 +20,11 @@ class AutoRecordService:
         self.format_timestamp = format_timestamp
         self.server_time_payload = server_time_payload
         self.count_results = count_results
+        self.storage_factory = storage_factory or create_tenant_storage_factory()
 
     def load(self, token):
         token = sanitize_token(token)
-        data = read_auto_payload(token)
+        data = self.storage_factory(token).auto.read()
         config = self.normalize_config(data.get("config") if isinstance(data, dict) else {})
         state = self.default_state(config)
         if isinstance(data, dict) and isinstance(data.get("state"), dict):
@@ -40,7 +42,7 @@ class AutoRecordService:
         config = self.normalize_config(record.get("config", {}))
         state = record.get("state") if isinstance(record.get("state"), dict) else self.default_state(config)
         self.trim_history(state)
-        write_auto_payload(token, {"config": config, "state": state})
+        self.storage_factory(token).auto.write({"config": config, "state": state})
         return {"config": config, "state": state}
 
     def append_history(self, state, summary):

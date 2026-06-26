@@ -1,14 +1,8 @@
 import time
 
 from proxy_checker.responses import ok_response
-from proxy_checker.storage.checked_store import read_checked_list, write_checked_list
-from proxy_checker.storage.repo_store import (
-    compact_repo,
-    compact_repo_item,
-    read_repo_data,
-    save_repo_payload,
-    write_repo_data,
-)
+from proxy_checker.storage.repo_backend import compact_repo, compact_repo_item
+from proxy_checker.storage.tenant import create_tenant_storage_factory
 from proxy_checker.utils import proxy_key, sanitize_token
 
 
@@ -76,7 +70,8 @@ def filter_repo_by_grades(repo, grades):
     ]
 
 
-def merge_repo_results(token, repo, results, checked_inputs, policy, repo_update_policies):
+def merge_repo_results(token, repo, results, checked_inputs, policy, repo_update_policies, storage_factory=None):
+    storage_factory = storage_factory or create_tenant_storage_factory()
     policy = policy if policy in repo_update_policies else "stable_only"
     participating = {proxy_key(proxy) for proxy in checked_inputs}
     result_by_key = {}
@@ -128,7 +123,7 @@ def merge_repo_results(token, repo, results, checked_inputs, policy, repo_update
             index_by_key[proxy_key(item["proxy"])] = existing_index
             updated += 1
 
-    saved = write_repo_data(token, next_repo)
+    saved = storage_factory(token).repo.write(next_repo)
     return {
         "repo_count": len(saved),
         "repo_added": added,
@@ -138,29 +133,17 @@ def merge_repo_results(token, repo, results, checked_inputs, policy, repo_update
 
 
 class RepoService:
-    def __init__(
-        self,
-        *,
-        read_repo_func=read_repo_data,
-        save_repo_func=save_repo_payload,
-        write_repo_func=write_repo_data,
-        read_checked_func=read_checked_list,
-        write_checked_func=write_checked_list,
-    ):
-        self.read_repo = read_repo_func
-        self.save_repo = save_repo_func
-        self.write_repo = write_repo_func
-        self.read_checked = read_checked_func
-        self.write_checked = write_checked_func
+    def __init__(self, *, storage_factory=None):
+        self.storage_factory = storage_factory or create_tenant_storage_factory()
 
     def repo_json(self, token):
-        return self.read_repo(token)
+        return self.storage_factory(token).repo.read()
 
     def repo_text(self, token):
-        return "\n".join(item["proxy"] for item in self.read_repo(token))
+        return "\n".join(item["proxy"] for item in self.storage_factory(token).repo.read())
 
     def checked_text(self, token):
-        return "\n".join(self.read_checked(token))
+        return "\n".join(self.storage_factory(token).checked.list())
 
     def save(self, data):
         repo_data = data.get("repo")
@@ -170,7 +153,7 @@ class RepoService:
         base_count = data.get("base_count")
         incoming = repo_data if repo_data is not None else [{"proxy": proxy} for proxy in proxies]
 
-        saved, response = self.save_repo(token, incoming, mode, base_count)
+        saved, response = self.storage_factory(token).repo.save_payload(incoming, mode, base_count)
         if saved is None:
             return response
         response["url"] = f"/api/repo/{token}.json" if repo_data is not None else f"/api/repo/{token}.txt"
@@ -178,23 +161,24 @@ class RepoService:
 
     def load(self, data):
         token = sanitize_token(data.get("token", "default"))
-        repo = self.read_repo(token)
+        repo = self.storage_factory(token).repo.read()
         return {"repo": repo, "count": len(repo)}
 
     def clear(self, data):
         token = sanitize_token(data.get("token", "default"))
-        self.write_repo(token, [])
+        self.storage_factory(token).repo.write([])
         return ok_response(count=0)
 
     def save_checked(self, data):
         token = sanitize_token(data.get("token", "default"))
-        saved = self.write_checked(token, data.get("proxies", []))
+        saved = self.storage_factory(token).checked.write(data.get("proxies", []))
         return ok_response(count=len(saved))
 
     def filter_checked(self, data):
         token = sanitize_token(data.get("token", "default"))
         proxies = data.get("proxies", [])
-        checked_set = {proxy_key(proxy) for proxy in self.read_checked(token)}
+        storage = self.storage_factory(token)
+        checked_set = {proxy_key(proxy) for proxy in storage.checked.list()}
         unchecked = [proxy for proxy in proxies if proxy_key(proxy) not in checked_set]
         return {
             "unchecked": unchecked,

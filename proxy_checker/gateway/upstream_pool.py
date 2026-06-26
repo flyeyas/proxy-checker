@@ -4,7 +4,7 @@ import threading
 from urllib.parse import unquote, urlsplit
 
 from proxy_checker.services.repo_service import filter_repo_by_grades
-from proxy_checker.storage.repo_store import read_repo_data
+from proxy_checker.storage.tenant import TenantStorage, list_tenant_tokens
 from proxy_checker.utils import sanitize_token
 
 
@@ -25,12 +25,16 @@ def choose_upstream(candidates, current_index):
     return candidates[start:] + candidates[:start], next_index
 
 
+def _default_read_repo(token):
+    return TenantStorage(token).repo.read()
+
+
 class ProxyGatewayUpstreamPool:
-    def __init__(self, repo_dir, token="", grades="A,B", read_repo=read_repo_data):
+    def __init__(self, repo_dir, token="", grades="A,B", read_repo=None):
         self.repo_dir = repo_dir
         self.token = str(token or "").strip()
         self.grades = str(grades or "A,B")
-        self.read_repo = read_repo
+        self.read_repo = read_repo or _default_read_repo
         self._lock = threading.Lock()
         self._index = 0
 
@@ -40,14 +44,9 @@ class ProxyGatewayUpstreamPool:
     def repo_tokens(self):
         if self.token:
             return [sanitize_token(self.token)]
-        tokens = set()
         if not os.path.isdir(self.repo_dir):
             return []
-        for name in os.listdir(self.repo_dir):
-            base, ext = os.path.splitext(name)
-            if ext in (".json", ".txt") and base:
-                tokens.add(sanitize_token(base))
-        return sorted(tokens)
+        return list_tenant_tokens()
 
     @staticmethod
     def normalize_upstream_proxy(value):

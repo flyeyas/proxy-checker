@@ -1,8 +1,17 @@
 import logging
 import os
+from logging.handlers import RotatingFileHandler
+
+from proxy_checker.config import LOG_BACKUP_COUNT, LOG_MAX_BYTES
 
 
-def configure_logging(log_file_path, logger_name="proxy_checker"):
+def configure_logging(
+    log_file_path,
+    logger_name="proxy_checker",
+    *,
+    max_bytes=None,
+    backup_count=None,
+):
     logger = logging.getLogger(logger_name)
     if getattr(logger, "_proxy_checker_configured", False):
         return logger
@@ -14,7 +23,12 @@ def configure_logging(log_file_path, logger_name="proxy_checker"):
     directory = os.path.dirname(os.path.abspath(log_file_path))
     if directory:
         os.makedirs(directory, exist_ok=True)
-    file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
+    file_handler = RotatingFileHandler(
+        log_file_path,
+        maxBytes=max_bytes if max_bytes is not None else LOG_MAX_BYTES,
+        backupCount=backup_count if backup_count is not None else LOG_BACKUP_COUNT,
+        encoding="utf-8",
+    )
     file_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
     logger.addHandler(file_handler)

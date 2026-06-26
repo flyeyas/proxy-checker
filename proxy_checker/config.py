@@ -51,14 +51,19 @@ def ensure_runtime_dir(path):
     return path
 
 
-REPO_DIR = runtime_path("repo_data")
-CHECKED_DIR = runtime_path("checked_data")
-AUTO_DIR = runtime_path("auto_data")
+DATA_DIR = runtime_path("data")
 LOG_DIR = runtime_path("logs")
+
+LEGACY_REPO_DIR = runtime_path("repo_data")
+LEGACY_CHECKED_DIR = runtime_path("checked_data")
+LEGACY_AUTO_DIR = runtime_path("auto_data")
+LEGACY_RUNS_DIR = LOG_DIR
+
+REPO_DIR = DATA_DIR
 
 
 def ensure_runtime_dirs():
-    for path in (REPO_DIR, CHECKED_DIR, AUTO_DIR, LOG_DIR):
+    for path in (DATA_DIR, LOG_DIR):
         ensure_runtime_dir(path)
 
 
@@ -96,6 +101,9 @@ MAX_CHECK_ROUNDS = get_config_int("max_check_rounds", "MAX_CHECK_ROUNDS", 3)
 LOG_LIMIT = get_config_int("log_limit", "LOG_LIMIT", 100)
 PORT = get_config_int("port", "PORT", 8888)
 HTTP_THREADS = get_config_int("http_threads", "HTTP_THREADS", 16)
+
+LOG_MAX_BYTES = get_config_int("log_max_bytes", "LOG_MAX_BYTES", 10 * 1024 * 1024)
+LOG_BACKUP_COUNT = get_config_int("log_backup_count", "LOG_BACKUP_COUNT", 5)
 
 PROXY_GATEWAY_ENABLED = get_config_bool("proxy_gateway_enabled", "PROXY_GATEWAY_ENABLED", True)
 PROXY_GATEWAY_BIND = str(get_config_value("proxy_gateway_bind", "PROXY_GATEWAY_BIND", "127.0.0.1"))

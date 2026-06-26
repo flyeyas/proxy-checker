@@ -29,11 +29,6 @@ def register_app_blueprints(
     status_auto,
     log_service,
     repo_service,
-    read_repo_data,
-    save_repo_payload,
-    write_repo_data,
-    read_checked_list,
-    write_checked_list,
     include_repo=True,
 ):
     app.register_blueprint(create_static_blueprint(root_dir, auth_service))
@@ -57,11 +52,6 @@ def register_app_blueprints(
         app.register_blueprint(create_repo_blueprint(
             auth_service,
             repo_service=repo_service,
-            read_repo_data=read_repo_data,
-            save_repo_payload=save_repo_payload,
-            write_repo_data=write_repo_data,
-            read_checked_list=read_checked_list,
-            write_checked_list=write_checked_list,
         ))
     app.register_blueprint(create_log_blueprint(auth_service, log_service=log_service))
     app.register_blueprint(create_auto_blueprint(

@@ -5,7 +5,7 @@ from proxy_checker.services.time_service import (
     normalize_timezone,
     server_time_payload,
 )
-from proxy_checker.storage.log_store import clear_logs, read_logs
+from proxy_checker.storage.tenant import create_tenant_storage_factory
 
 
 class LogService:
@@ -14,13 +14,17 @@ class LogService:
         *,
         app_timezone=APP_TIMEZONE,
         timezone_options=TIMEZONE_OPTIONS,
-        read_logs_func=read_logs,
-        clear_logs_func=clear_logs,
+        storage_factory=None,
     ):
         self.app_timezone = app_timezone
         self.timezone_ids = {item["id"] for item in timezone_options}
-        self.read_logs = read_logs_func
-        self.clear_logs = clear_logs_func
+        self.storage_factory = storage_factory or create_tenant_storage_factory()
+
+    def read_logs(self, token):
+        return self.storage_factory(token).runs.list()
+
+    def clear_logs(self, token):
+        self.storage_factory(token).runs.clear()
 
     def normalize_timezone(self, value):
         return normalize_timezone(value, self.timezone_ids, self.app_timezone)

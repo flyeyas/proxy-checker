@@ -37,11 +37,6 @@ class AppDependencies:
     status_auto: object
     log_service: object
     repo_service: object
-    read_repo_data: object
-    save_repo_payload: object
-    write_repo_data: object
-    read_checked_list: object
-    write_checked_list: object
 
     def blueprint_kwargs(self):
         return self.__dict__.copy()
@@ -67,11 +62,6 @@ def resolve_app_dependencies(
     status_auto=None,
     log_service=None,
     repo_service=None,
-    read_repo_data=None,
-    save_repo_payload=None,
-    write_repo_data=None,
-    read_checked_list=None,
-    write_checked_list=None,
 ):
     root_dir = root_dir or BASE_DIR
     auth_service = auth_service or create_default_auth_service()
@@ -113,9 +103,4 @@ def resolve_app_dependencies(
         status_auto=status_auto,
         log_service=log_service,
         repo_service=repo_service,
-        read_repo_data=read_repo_data,
-        save_repo_payload=save_repo_payload,
-        write_repo_data=write_repo_data,
-        read_checked_list=read_checked_list,
-        write_checked_list=write_checked_list,
     )

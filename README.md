@@ -390,7 +390,7 @@ docker compose -f docker-compose.ghcr.yml up -d
   "log_limit": 100,
   "timezone": "UTC",
   "port": 8888,
-  "log_file": "server.log"
+  "log_file": "logs/server.log"
 }
 ```
 
@@ -421,7 +421,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 | `proxy_gateway_grades` | `PROXY_GATEWAY_GRADES` | `A,B` | 代理网关允许使用的仓库等级 |
 | `proxy_gateway_token` | `PROXY_GATEWAY_TOKEN` | 空 | 限定只使用某个仓库 token，留空则扫描全部仓库 |
 | `proxy_gateway_timeout` | `PROXY_GATEWAY_TIMEOUT` | `20` | 代理网关连接和转发超时时间 |
-| `log_file` | `LOG_FILE` | `server.log` | 服务日志路径 |
+| `log_file` | `LOG_FILE` | `logs/server.log` | 服务日志路径 |
 
 ## systemd 示例
 

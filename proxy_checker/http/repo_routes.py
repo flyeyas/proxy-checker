@@ -1,34 +1,12 @@
 from flask import Blueprint, Response, jsonify
 
 from proxy_checker.http.auth_utils import json_request_data, require_auth
-from proxy_checker.services.repo_service import (
-    RepoService,
-    read_checked_list as default_read_checked_list,
-    read_repo_data as default_read_repo_data,
-    save_repo_payload as default_save_repo_payload,
-    write_checked_list as default_write_checked_list,
-    write_repo_data as default_write_repo_data,
-)
+from proxy_checker.services.repo_service import RepoService
 
 
-def create_repo_blueprint(
-    auth_service,
-    *,
-    repo_service=None,
-    read_repo_data=None,
-    save_repo_payload=None,
-    write_repo_data=None,
-    read_checked_list=None,
-    write_checked_list=None,
-):
+def create_repo_blueprint(auth_service, *, repo_service=None):
     bp = Blueprint("repo", __name__)
-    repo_service = repo_service or RepoService(
-        read_repo_func=read_repo_data or default_read_repo_data,
-        save_repo_func=save_repo_payload or default_save_repo_payload,
-        write_repo_func=write_repo_data or default_write_repo_data,
-        read_checked_func=read_checked_list or default_read_checked_list,
-        write_checked_func=write_checked_list or default_write_checked_list,
-    )
+    repo_service = repo_service or RepoService()
 
     @bp.get("/api/repo/<token>.json")
     def api_repo_json(token):

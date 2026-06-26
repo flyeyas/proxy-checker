@@ -9,7 +9,7 @@ from proxy_checker.services.auto_run_service import (
     build_failed_auto_runtime,
 )
 from proxy_checker.services.auto_scheduler_service import interrupt_auto_state, resolve_schedule_state
-from proxy_checker.utils import normalize_proxy_list, proxy_key, sanitize_token
+from proxy_checker.utils import normalize_proxy_list, sanitize_token
 
 
 class AutoRunCoordinator:
@@ -23,13 +23,9 @@ class AutoRunCoordinator:
         normalize_config,
         compute_next_run,
         target_name,
-        read_repo,
-        read_checked,
-        append_checked,
-        merge_repo_results,
-        start_log,
-        finish_log,
+        storage_factory,
         list_tokens,
+        merge_repo_results,
         default_rounds,
         default_max_concurrent,
         default_timezone,
@@ -42,13 +38,9 @@ class AutoRunCoordinator:
         self.normalize_config = normalize_config
         self.compute_next_run = compute_next_run
         self.target_name = target_name
-        self.read_repo = read_repo
-        self.read_checked = read_checked
-        self.append_checked = append_checked
-        self.merge_repo_results = merge_repo_results
-        self.start_log = start_log
-        self.finish_log = finish_log
+        self.storage_factory = storage_factory
         self.list_tokens = list_tokens
+        self.merge_repo_results = merge_repo_results
         self.default_rounds = default_rounds
         self.default_max_concurrent = default_max_concurrent
         self.default_timezone = default_timezone
@@ -118,7 +110,8 @@ class AutoRunCoordinator:
             else:
                 self.runtime_store.clear_stopped_results(token)
             self.runtime_store.finish(token, runtime.get("run_id"))
-        self.finish_log(token, runtime.get("log_id") or runtime.get("run_id"), {
+        storage = self.storage_factory(token)
+        storage.runs.update(runtime.get("log_id") or runtime.get("run_id"), {
             **summary,
             "type": "auto",
             "status": status,
@@ -142,14 +135,13 @@ class AutoRunCoordinator:
             source_proxies = normalize_proxy_list(fetched)
 
             self.update_runtime(token, stage="loading_repo", source_count=len(source_proxies))
-            repo = self.read_repo(token)
+            storage = self.storage_factory(token)
+            repo = storage.repo.read()
             repo_proxies = normalize_proxy_list(item.get("proxy") for item in repo)
             combined = normalize_proxy_list(source_proxies + repo_proxies)
 
-            checked = self.read_checked(token)
-            checked_keys = {proxy_key(proxy) for proxy in checked}
             if config["detect_mode"] == "skip":
-                to_check = [proxy for proxy in combined if proxy_key(proxy) not in checked_keys]
+                to_check = storage.checked.filter_unchecked(combined)
             else:
                 to_check = combined
             skipped = len(combined) - len(to_check)
@@ -190,7 +182,7 @@ class AutoRunCoordinator:
 
             self.update_runtime(token, stage="updating_repo")
             detected = [result.get("original") or result.get("proxy") for result in runtime.get("results", [])]
-            self.append_checked(token, detected)
+            storage.checked.add(detected)
             repo_summary = self.merge_repo_results(
                 token=token,
                 repo=repo,
@@ -227,7 +219,8 @@ class AutoRunCoordinator:
             run_id = f"auto_{int(time.time())}_{id(config)}"
             started_at = time.time()
             target_name = self.target_name(config["target_profile"])
-            log_id = self.start_log(token, build_auto_log_entry(run_id, reason, started_at, config, target_name))
+            storage = self.storage_factory(token)
+            log_id = storage.runs.insert(build_auto_log_entry(run_id, reason, started_at, config, target_name))
             runtime = build_auto_runtime(run_id, log_id, reason, started_at, config, threading.Event())
             self.runtime_store.create(token, runtime)
             state = record["state"]

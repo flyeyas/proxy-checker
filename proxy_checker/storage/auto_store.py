@@ -1,22 +1,29 @@
-from proxy_checker.config import AUTO_DIR
-from proxy_checker.storage.files import atomic_write_json, read_json_file
-from proxy_checker.storage.paths import list_token_files, token_file_path
+"""Legacy auto-task storage API.
+
+Phase 2 thin wrapper: all functions delegate to ``TenantStorage(token).auto``.
+"""
+
+from proxy_checker.storage.tenant import TenantStorage, list_tenant_tokens
+
+__all__ = [
+    "auto_json_path",
+    "list_auto_tokens",
+    "read_auto_payload",
+    "write_auto_payload",
+]
 
 
 def auto_json_path(token):
-    return token_file_path(AUTO_DIR, token, "json")
+    return TenantStorage(token).auto.path()
 
 
 def list_auto_tokens():
-    return list_token_files(AUTO_DIR, "json")
+    return list_tenant_tokens()
 
 
 def read_auto_payload(token):
-    data = read_json_file(auto_json_path(token), {})
-    return data if isinstance(data, dict) else {}
+    return TenantStorage(token).auto.read()
 
 
 def write_auto_payload(token, payload):
-    data = payload if isinstance(payload, dict) else {}
-    atomic_write_json(auto_json_path(token), data)
-    return data
+    return TenantStorage(token).auto.write(payload)

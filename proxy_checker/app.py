@@ -24,11 +24,6 @@ def create_app(
     status_auto=None,
     log_service=None,
     repo_service=None,
-    read_repo_data=None,
-    save_repo_payload=None,
-    write_repo_data=None,
-    read_checked_list=None,
-    write_checked_list=None,
     include_repo=True,
 ):
     dependencies = resolve_app_dependencies(
@@ -50,11 +45,6 @@ def create_app(
         status_auto=status_auto,
         log_service=log_service,
         repo_service=repo_service,
-        read_repo_data=read_repo_data,
-        save_repo_payload=save_repo_payload,
-        write_repo_data=write_repo_data,
-        read_checked_list=read_checked_list,
-        write_checked_list=write_checked_list,
     )
     app = Flask(__name__, static_folder=None)
     init_cors(app)

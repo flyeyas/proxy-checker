@@ -26,11 +26,6 @@ class AppDependenciesTest(unittest.TestCase):
             "status_auto": Mock(),
             "log_service": Mock(),
             "repo_service": Mock(),
-            "read_repo_data": Mock(),
-            "save_repo_payload": Mock(),
-            "write_repo_data": Mock(),
-            "read_checked_list": Mock(),
-            "write_checked_list": Mock(),
         }
 
         dependencies = resolve_app_dependencies(**custom)

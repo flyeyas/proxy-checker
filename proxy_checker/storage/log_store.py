@@ -1,12 +1,36 @@
-import threading
-import time
+"""Legacy run-log storage API.
 
-from proxy_checker.config import LOG_DIR, LOG_LIMIT
-from proxy_checker.storage.files import atomic_write_json, read_json_file
-from proxy_checker.storage.paths import token_file_path
-from proxy_checker.utils import sanitize_token
+Phase 2 thin wrapper: all functions delegate to ``TenantStorage(token).runs``.
+
+The historical module-level ``_log_limit`` (set via ``set_log_limit``) is
+preserved as a process-wide default and applied to every freshly-created
+``RunsBackend`` instance, matching the legacy semantics where one global
+limit controlled all tokens.
+"""
+
+from proxy_checker.config import LOG_LIMIT
+from proxy_checker.storage.runs_backend import _compact as compact_log
+from proxy_checker.storage.tenant import TenantStorage
+
+__all__ = [
+    "compact_log",
+    "log_json_path",
+    "set_log_limit",
+    "read_logs",
+    "write_logs",
+    "start_log",
+    "finish_log",
+    "clear_logs",
+]
+
 
 _log_limit = LOG_LIMIT
+
+
+def _runs(token):
+    storage = TenantStorage(token)
+    storage.runs.set_default_limit(_log_limit)
+    return storage.runs
 
 
 def set_log_limit(limit):
@@ -20,86 +44,24 @@ def set_log_limit(limit):
 
 
 def log_json_path(token):
-    return token_file_path(LOG_DIR, token, "json")
-
-
-def compact_log(entry):
-    if not isinstance(entry, dict):
-        return None
-    log_id = str(entry.get("id") or "").strip()
-    if not log_id:
-        return None
-    out = {
-        "id": log_id,
-        "type": str(entry.get("type") or "manual"),
-        "status": str(entry.get("status") or "running"),
-        "started_at": int(entry.get("started_at") or time.time()),
-    }
-    for key in (
-        "finished_at", "duration_seconds", "session_id", "reason", "target_profile",
-        "target_name", "rounds", "max_concurrent", "detect_mode", "repo_update_policy",
-        "schedule_type", "interval_hours", "daily_time", "timezone", "source_count",
-        "repo_input_count", "repo_count", "input_count", "skipped", "total", "done",
-        "valid_count", "unstable_count", "invalid_count", "repo_added", "repo_updated",
-        "repo_removed", "error",
-    ):
-        value = entry.get(key)
-        if value is not None and value != "":
-            out[key] = value
-    return out
+    return TenantStorage(token).runs.path()
 
 
 def read_logs(token):
-    data = read_json_file(log_json_path(token), [])
-    if not isinstance(data, list):
-        return []
-    logs = [compact_log(item) for item in data]
-    return [item for item in logs if item]
+    return _runs(token).list()
 
 
 def write_logs(token, logs):
-    cleaned = [compact_log(item) for item in logs]
-    cleaned = [item for item in cleaned if item]
-    cleaned.sort(key=lambda item: int(item.get("started_at") or 0), reverse=True)
-    atomic_write_json(log_json_path(token), cleaned[:_log_limit])
-    return cleaned[:_log_limit]
+    return _runs(token).replace_all(logs)
 
 
 def start_log(token, entry):
-    token = sanitize_token(token)
-    now = int(time.time())
-    entry = dict(entry or {})
-    entry.setdefault("id", f"log_{now}_{threading.get_ident()}")
-    entry.setdefault("started_at", now)
-    entry.setdefault("status", "running")
-    logs = read_logs(token)
-    logs.insert(0, entry)
-    write_logs(token, logs)
-    return entry["id"]
+    return _runs(token).insert(entry)
 
 
 def finish_log(token, log_id, updates):
-    token = sanitize_token(token)
-    logs = read_logs(token)
-    now = int(time.time())
-    found = False
-    for item in logs:
-        if item.get("id") != log_id:
-            continue
-        item.update(updates or {})
-        item.setdefault("finished_at", now)
-        item["duration_seconds"] = max(0, int(item.get("finished_at") or now) - int(item.get("started_at") or now))
-        found = True
-        break
-    if not found:
-        entry = dict(updates or {})
-        entry["id"] = log_id
-        entry.setdefault("started_at", now)
-        entry.setdefault("finished_at", now)
-        entry["duration_seconds"] = 0
-        logs.insert(0, entry)
-    return write_logs(token, logs)
+    return _runs(token).update(log_id, updates)
 
 
 def clear_logs(token):
-    atomic_write_json(log_json_path(token), [])
+    _runs(token).clear()

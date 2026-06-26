@@ -10,5 +10,5 @@
   "log_limit": 100,
   "timezone": "UTC",
   "port": 8888,
-  "log_file": "server.log"
+  "log_file": "logs/server.log"
 }

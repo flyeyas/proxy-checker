@@ -12,9 +12,11 @@ class AutoRunCoordinatorTest(unittest.TestCase):
         self.record_service = FakeRecordService(self.config())
         self.fetch_service = FakeFetchService(["http://1.1.1.1:80", "http://2.2.2.2:80"])
         self.engine = FakeCheckEngine()
-        self.appended_checked = []
+        self.storage = FakeStorage(
+            repo=[{"proxy": "http://2.2.2.2:80"}, {"proxy": "http://3.3.3.3:80"}],
+            checked=["http://3.3.3.3:80"],
+        )
         self.merged_calls = []
-        self.finished_logs = []
         self.coordinator = AutoRunCoordinator(
             runtime_store=self.runtime_store,
             record_service=self.record_service,
@@ -23,12 +25,8 @@ class AutoRunCoordinatorTest(unittest.TestCase):
             normalize_config=lambda config: {**self.config(), **(config or {})},
             compute_next_run=lambda _config, _now=None: 1234,
             target_name=lambda profile: f"Target {profile}",
-            read_repo=lambda _token: [{"proxy": "http://2.2.2.2:80"}, {"proxy": "http://3.3.3.3:80"}],
-            read_checked=lambda _token: ["http://3.3.3.3:80"],
-            append_checked=self.append_checked,
+            storage_factory=lambda _token: self.storage,
             merge_repo_results=self.merge_repo_results,
-            start_log=lambda _token, _entry: "log-id",
-            finish_log=self.finish_log,
             list_tokens=lambda: ["demo"],
             default_rounds=lambda: 2,
             default_max_concurrent=lambda: 5,
@@ -50,15 +48,9 @@ class AutoRunCoordinatorTest(unittest.TestCase):
             "repo_update_policy": "stable_only",
         }
 
-    def append_checked(self, token, proxies):
-        self.appended_checked.append((token, list(proxies)))
-
     def merge_repo_results(self, **kwargs):
         self.merged_calls.append(kwargs)
         return {"repo_added_count": 1}
-
-    def finish_log(self, token, log_id, updates):
-        self.finished_logs.append((token, log_id, updates))
 
     def test_execute_run_completes_and_merges_results(self):
         config = self.config()
@@ -69,9 +61,10 @@ class AutoRunCoordinatorTest(unittest.TestCase):
 
         self.assertFalse(self.runtime_store.has("demo"))
         self.assertEqual(self.engine.checked_proxies, ["http://1.1.1.1:80", "http://2.2.2.2:80"])
-        self.assertEqual(self.appended_checked, [("demo", ["http://1.1.1.1:80", "http://2.2.2.2:80"])])
+        self.assertEqual(self.storage.checked.added, [["http://1.1.1.1:80", "http://2.2.2.2:80"]])
         self.assertEqual(self.merged_calls[0]["checked_inputs"], ["http://1.1.1.1:80", "http://2.2.2.2:80"])
-        self.assertEqual(self.finished_logs[0][2]["status"], "completed")
+        finished = self.storage.runs.updated[-1]
+        self.assertEqual(finished[1]["status"], "completed")
         self.assertEqual(self.record_service.records["demo"]["state"]["status"], "completed")
         self.assertEqual(self.record_service.records["demo"]["state"]["last_summary"]["repo_added_count"], 1)
 
@@ -155,6 +148,51 @@ class FakeCheckEngine:
         self.checked_proxies = list(kwargs["proxies"])
         for proxy in self.checked_proxies:
             kwargs["on_result"]({"proxy": proxy, "original": proxy, "valid": True})
+
+
+class FakeRepoBackend:
+    def __init__(self, items):
+        self._items = list(items)
+
+    def read(self):
+        return list(self._items)
+
+
+class FakeCheckedBackend:
+    def __init__(self, items):
+        self._items = list(items)
+        self.added = []
+
+    def filter_unchecked(self, proxies):
+        existing = set(self._items)
+        return [p for p in proxies if p not in existing]
+
+    def add(self, proxies):
+        proxies = list(proxies)
+        self.added.append(proxies)
+        for p in proxies:
+            if p not in self._items:
+                self._items.append(p)
+
+
+class FakeRunsBackend:
+    def __init__(self):
+        self.inserted = []
+        self.updated = []
+
+    def insert(self, entry):
+        self.inserted.append(dict(entry))
+        return "log-id"
+
+    def update(self, run_id, fields):
+        self.updated.append((run_id, dict(fields)))
+
+
+class FakeStorage:
+    def __init__(self, repo, checked):
+        self.repo = FakeRepoBackend(repo)
+        self.checked = FakeCheckedBackend(checked)
+        self.runs = FakeRunsBackend()
 
 
 if __name__ == "__main__":

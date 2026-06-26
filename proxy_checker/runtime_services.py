@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 
 from proxy_checker.checking.engine import DEFAULT_TARGET_CHAT
-from proxy_checker.config import LOG_FILE_PATH, Settings
+from proxy_checker.config import LOG_FILE_PATH, Settings, ensure_runtime_dirs
 from proxy_checker.gateway.runtime_gateway import create_runtime_gateway_services
+from proxy_checker.migrate.v1_to_v2 import maybe_run_migration
 from proxy_checker.http.runtime_http import create_runtime_http_service
 from proxy_checker.services.auth_service import create_runtime_auth_service
 from proxy_checker.services.deep_check_service import DeepCheckService
@@ -22,6 +23,7 @@ from proxy_checker.services.runtime_settings_service import (
 )
 from proxy_checker.services.session_cleanup_service import SessionCleanupService
 from proxy_checker.services.session_service import InMemorySessionStore
+from proxy_checker.storage.tenant import create_tenant_storage_factory
 
 
 class EngineRef:
@@ -69,7 +71,10 @@ class RuntimeServices:
 def create_runtime_services():
     state = Settings.load()
     log = configure_logging(LOG_FILE_PATH)
+    ensure_runtime_dirs()
+    maybe_run_migration(logger=log)
     target_chat = DEFAULT_TARGET_CHAT
+    storage_factory = create_tenant_storage_factory()
     auth_service = create_runtime_auth_service(state)
     check_engine_factory = RuntimeCheckEngineFactory(state)
     engine_ref = EngineRef(check_engine_factory.create())
@@ -119,6 +124,7 @@ def create_runtime_services():
         check_engine_provider=engine_ref.get,
         repo_update_service=repo_update_service,
         logger=log,
+        storage_factory=storage_factory,
     )
     manual_check_service = create_manual_check_service(
         state=state,
@@ -127,6 +133,7 @@ def create_runtime_services():
         check_engine_provider=engine_ref.get,
         runtime_options_service=runtime_options_service,
         logger=log,
+        storage_factory=storage_factory,
     )
     lifecycle_service = RuntimeLifecycleService(
         state=state,
