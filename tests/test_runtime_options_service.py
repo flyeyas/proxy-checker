@@ -1,6 +1,6 @@
 import unittest
 
-from proxy_checker.services.runtime_options_service import RuntimeOptionsService, create_runtime_options_service
+from proxy_forge.services.runtime_options_service import RuntimeOptionsService, create_runtime_options_service
 
 
 class RuntimeOptionsServiceTest(unittest.TestCase):

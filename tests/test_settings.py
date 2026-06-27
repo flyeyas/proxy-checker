@@ -2,8 +2,8 @@ import importlib
 import unittest
 from unittest.mock import patch
 
-from proxy_checker import config
-from proxy_checker.config import CHECK_ROUNDS, PORT, Settings
+from proxy_forge import config
+from proxy_forge.config import CHECK_ROUNDS, PORT, Settings
 
 
 class SettingsTest(unittest.TestCase):

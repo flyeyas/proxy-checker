@@ -1,5 +1,5 @@
 var validResults=[],unstableResults=[],invalidResults=[],busy=false,totalCount=0,currentSessionId=null,resultsIndex=0;
-var API_BASE=window.location.hostname.endsWith('vercel.app')?'':(window.location.hostname==='flyeyas.github.io'?'https://proxy-checker-nu.vercel.app':window.location.origin);
+var API_BASE=window.location.hostname.endsWith('vercel.app')?'':(window.location.hostname==='flyeyas.github.io'?'https://proxy-forge-nu.vercel.app':window.location.origin);
 var isRemote=window.location.hostname.endsWith('vercel.app')||window.location.hostname==='flyeyas.github.io';
 var proxyInput=document.getElementById("proxyInput");
 var checkBtn=document.getElementById("checkBtn");
@@ -19,9 +19,9 @@ var cfBypassStatEl=document.getElementById("cfBypassStat");
 var apiReachableStatEl=document.getElementById("apiReachableStat");
 var statusText=document.getElementById("statusText");
 var proxyCountBadge=document.getElementById("proxyCountBadge");
-var TARGET_PROFILE_KEY='proxy_checker_target_profile';
-var ACTIVE_SESSION_KEY='proxy_checker_active_session';
-var AUTH_TOKEN_KEY='proxy_checker_auth_token';
+var TARGET_PROFILE_KEY='proxy_forge_target_profile';
+var ACTIVE_SESSION_KEY='proxy_forge_active_session';
+var AUTH_TOKEN_KEY='proxy_forge_auth_token';
 var authRequired=false;
 var authenticated=false;
 var autoModeAvailable=false;
@@ -322,7 +322,7 @@ document.addEventListener('click',function(e){
 // GitHub Pages: show backend config panel
 if(isRemote && !window.location.hostname.endsWith('vercel.app')){
   document.getElementById("backendConfig").style.display="block";
-  var saved=localStorage.getItem("proxy_checker_backend");
+  var saved=localStorage.getItem("proxy_forge_backend");
   if(saved){
     API_BASE=saved.replace(/\/$/,"");
     document.getElementById("backendUrl").value=API_BASE;
@@ -335,7 +335,7 @@ function connectBackend(){
   var url=document.getElementById("backendUrl").value.trim().replace(/\/$/,"");
   if(!url){toast("请输入后端地址");return}
   API_BASE=url;
-  localStorage.setItem("proxy_checker_backend",url);
+  localStorage.setItem("proxy_forge_backend",url);
   document.getElementById("connStatus").textContent="连接中...";
   document.getElementById("connStatus").style.color="#eab308";
   post("/api/capabilities",{},function(err,res){
@@ -359,8 +359,8 @@ checkAuthStatus();
 var roundsSelect=document.getElementById("roundsSelect");
 var concurrentInput=document.getElementById("concurrentInput");
 var roundsStatEl=document.getElementById("roundsStat");
-var CONCURRENT_KEY='proxy_checker_max_concurrent';
-var ROUNDS_KEY='proxy_checker_rounds';
+var CONCURRENT_KEY='proxy_forge_max_concurrent';
+var ROUNDS_KEY='proxy_forge_rounds';
 
 function normalizeConcurrent(value){
   var n=parseInt(value);
@@ -1058,9 +1058,9 @@ function addToRepoByGrade(grade){
 // ============================================================
 // [5] 我的仓库 — localStorage persistence
 // ============================================================
-var REPO_KEY='proxy_checker_repo';
-var USER_TOKEN_KEY='proxy_checker_token';
-var REPO_SYNCED_KEY='proxy_checker_synced';
+var REPO_KEY='proxy_forge_repo';
+var USER_TOKEN_KEY='proxy_forge_token';
+var REPO_SYNCED_KEY='proxy_forge_synced';
 var repoCache=null;
 var userTokenCache=null;
 
@@ -1748,9 +1748,9 @@ function loadRepoFromServer(callback){
     }
   });
 }
-var RESULTS_KEY='proxy_checker_results';
-var CHECKED_KEY='proxy_checker_checked';
-var detectMode=localStorage.getItem('proxy_checker_detect_mode')||'skip'; // 'skip' or 'force'
+var RESULTS_KEY='proxy_forge_results';
+var CHECKED_KEY='proxy_forge_checked';
+var detectMode=localStorage.getItem('proxy_forge_detect_mode')||'skip'; // 'skip' or 'force'
 var checkedProxies=new Set();
 var checkedSyncTimer=null;
 
@@ -1795,7 +1795,7 @@ function getCheckedCount(){return checkedProxies.size}
 
 function setDetectMode(mode){
   detectMode=mode;
-  localStorage.setItem('proxy_checker_detect_mode',mode);
+  localStorage.setItem('proxy_forge_detect_mode',mode);
   document.getElementById('detectDropdown').classList.remove('open');
   var label=document.getElementById('detectBtnLabel');
   if(mode==='skip'){label.textContent='跳过已检测'}

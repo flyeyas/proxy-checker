@@ -1,13 +1,13 @@
 import unittest
 
-from proxy_checker.services.runtime_settings_service import (
+from proxy_forge.services.runtime_settings_service import (
     RuntimeCapabilitiesService,
     RuntimeSettingsService,
     create_runtime_capabilities_service,
     create_runtime_settings_service,
     resolve_runtime_settings,
 )
-from proxy_checker.storage.config_store import read_local_config, write_local_config
+from proxy_forge.storage.config_store import read_local_config, write_local_config
 
 
 class RuntimeSettingsServiceTest(unittest.TestCase):

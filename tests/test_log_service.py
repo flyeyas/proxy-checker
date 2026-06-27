@@ -1,15 +1,37 @@
 import unittest
 
-from proxy_checker.services.log_service import LogService
+from proxy_forge.services.log_service import LogService
+
+
+class FakeRuns:
+    def __init__(self, items, on_clear=None):
+        self._items = items
+        self._on_clear = on_clear
+
+    def list(self):
+        return list(self._items)
+
+    def clear(self):
+        if self._on_clear:
+            self._on_clear()
+
+
+class FakeStorage:
+    def __init__(self, runs):
+        self.runs = runs
+
+
+def make_factory(runs):
+    return lambda _token: FakeStorage(runs)
 
 
 class LogServiceTest(unittest.TestCase):
     def test_payload_adds_display_times(self):
+        runs = FakeRuns([{"id": "one", "started_at": 1, "finished_at": 2, "timezone": "UTC"}])
         service = LogService(
             app_timezone="UTC",
             timezone_options=({"id": "UTC", "name": "UTC"},),
-            read_logs_func=lambda _token: [{"id": "one", "started_at": 1, "finished_at": 2, "timezone": "UTC"}],
-            clear_logs_func=lambda _token: None,
+            storage_factory=make_factory(runs),
         )
 
         payload = service.payload("default")
@@ -20,19 +42,16 @@ class LogServiceTest(unittest.TestCase):
         self.assertEqual(payload["server_time"]["timezone"], "UTC")
 
     def test_clear_returns_empty_payload_after_clear(self):
-        logs = [{"id": "one", "started_at": 1}]
+        items = [{"id": "one", "started_at": 1}]
 
-        def read_logs(_token):
-            return list(logs)
+        def on_clear():
+            items.clear()
 
-        def clear_logs(_token):
-            logs.clear()
-
+        runs = FakeRuns(items, on_clear=on_clear)
         service = LogService(
             app_timezone="UTC",
             timezone_options=({"id": "UTC", "name": "UTC"},),
-            read_logs_func=read_logs,
-            clear_logs_func=clear_logs,
+            storage_factory=make_factory(runs),
         )
 
         payload = service.clear("default")

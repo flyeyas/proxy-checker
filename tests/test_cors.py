@@ -2,7 +2,7 @@ import unittest
 
 from flask import Flask
 
-from proxy_checker.http.cors import CORS_HEADERS, init_cors
+from proxy_forge.http.cors import CORS_HEADERS, init_cors
 
 
 class CorsTest(unittest.TestCase):

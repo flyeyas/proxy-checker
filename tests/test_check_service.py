@@ -1,7 +1,7 @@
 import unittest
 
-from proxy_checker.services.check_service import ManualCheckService
-from proxy_checker.services.session_service import InMemorySessionStore
+from proxy_forge.services.check_service import ManualCheckService
+from proxy_forge.services.session_service import InMemorySessionStore
 
 
 class ManualCheckServiceTest(unittest.TestCase):

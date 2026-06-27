@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from proxy_checker.app_dependencies import AppDependencies, resolve_app_dependencies
-from proxy_checker.services.log_service import LogService
+from proxy_forge.app_dependencies import AppDependencies, resolve_app_dependencies
+from proxy_forge.services.log_service import LogService
 
 
 class AppDependenciesTest(unittest.TestCase):
@@ -26,11 +26,6 @@ class AppDependenciesTest(unittest.TestCase):
             "status_auto": Mock(),
             "log_service": Mock(),
             "repo_service": Mock(),
-            "read_repo_data": Mock(),
-            "save_repo_payload": Mock(),
-            "write_repo_data": Mock(),
-            "read_checked_list": Mock(),
-            "write_checked_list": Mock(),
         }
 
         dependencies = resolve_app_dependencies(**custom)

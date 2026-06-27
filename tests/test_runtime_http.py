@@ -2,14 +2,14 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from proxy_checker.http.runtime_http import RuntimeHttpService, create_runtime_http_service
+from proxy_forge.http.runtime_http import RuntimeHttpService, create_runtime_http_service
 
 
 class RuntimeHttpServiceTest(unittest.TestCase):
     def setUp(self):
         self.state = SimpleNamespace(
-            base_dir="/tmp/proxy-checker",
-            repo_dir="/tmp/proxy-checker/repo_data",
+            base_dir="/tmp/proxy-forge",
+            repo_dir="/tmp/proxy-forge/data",
             port=8888,
             http_threads=16,
             app_timezone="UTC",
@@ -29,7 +29,7 @@ class RuntimeHttpServiceTest(unittest.TestCase):
         )
 
     def test_serve_flask_http_delegates_to_runner(self):
-        with patch("proxy_checker.http.runtime_http.run_flask_http") as serve:
+        with patch("proxy_forge.http.runtime_http.run_flask_http") as serve:
             self.service.serve_flask_http()
 
         serve.assert_called_once()

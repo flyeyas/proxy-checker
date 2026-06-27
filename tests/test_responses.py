@@ -1,6 +1,6 @@
 import unittest
 
-from proxy_checker.responses import error_response, ok_response
+from proxy_forge.responses import error_response, ok_response
 
 
 class ResponsesTest(unittest.TestCase):

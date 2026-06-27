@@ -1,11 +1,12 @@
 import importlib.util
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from proxy_checker.services.auth_service import AuthService
-from proxy_checker.storage.repo_store import compact_repo, merge_repo_data
-from proxy_checker.utils import normalize_proxy_list
+from proxy_forge.services.auth_service import AuthService
+from proxy_forge.services.repo_service import RepoService
+from proxy_forge.storage.tenant import TenantDirLayout, create_tenant_storage_factory
 
 
 class FakeLogService:
@@ -23,62 +24,33 @@ class FakeLogService:
 @unittest.skipUnless(importlib.util.find_spec("flask"), "Flask is not installed")
 class FlaskAppTest(unittest.TestCase):
     def setUp(self):
-        from proxy_checker.app import create_app
+        from proxy_forge.app import create_app
 
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)
         (root / "index.html").write_text("index", encoding="utf-8")
         (root / "login.html").write_text("login", encoding="utf-8")
         (root / "app.js").write_text("app", encoding="utf-8")
-        self.repo_data = {}
-        self.checked_data = {}
+
+        self.data_dir = root / "data"
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.storage_factory = create_tenant_storage_factory(TenantDirLayout(str(self.data_dir)))
         self.log_service = FakeLogService()
         self.fetch_requests = []
         self.deep_check_requests = []
-        auth_service = AuthService("secret", "signing", 60, "proxy_checker_auth")
+        auth_service = AuthService("secret", "signing", 60, "proxy_forge_auth")
         self.app = create_app(
             root_dir=str(root),
             auth_service=auth_service,
             log_service=self.log_service,
+            repo_service=RepoService(storage_factory=self.storage_factory),
             deep_check=self.deep_check,
             fetch_proxies=self.fetch_proxies,
-            read_repo_data=self.read_repo_data,
-            save_repo_payload=self.save_repo_payload,
-            write_repo_data=self.write_repo_data,
-            read_checked_list=self.read_checked_list,
-            write_checked_list=self.write_checked_list,
         )
         self.client = self.app.test_client()
 
     def tearDown(self):
         self.temp_dir.cleanup()
-
-    def read_repo_data(self, token):
-        return list(self.repo_data.get(token, []))
-
-    def save_repo_payload(self, token, incoming, mode="merge", base_count=None):
-        incoming_repo = compact_repo(incoming)
-        existing_repo = self.read_repo_data(token)
-        saved = incoming_repo if mode == "replace" else merge_repo_data(existing_repo, incoming_repo)
-        self.repo_data[token] = saved
-        return saved, {
-            "ok": True,
-            "mode": mode,
-            "count": len(saved),
-            "current_count": len(existing_repo),
-            "submitted_count": len(incoming_repo),
-        }
-
-    def write_repo_data(self, token, repo):
-        self.repo_data[token] = compact_repo(repo)
-        return self.repo_data[token]
-
-    def read_checked_list(self, token):
-        return list(self.checked_data.get(token, []))
-
-    def write_checked_list(self, token, proxies):
-        self.checked_data[token] = normalize_proxy_list(proxies)
-        return self.checked_data[token]
 
     def deep_check(self, data):
         self.deep_check_requests.append(dict(data))
@@ -213,7 +185,7 @@ class FlaskAppTest(unittest.TestCase):
         self.assertEqual(self.deep_check_requests, [{"proxy": "http://127.0.0.1:8080"}])
 
     def test_create_app_can_skip_repo_routes(self):
-        from proxy_checker.app import create_app
+        from proxy_forge.app import create_app
 
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -222,7 +194,7 @@ class FlaskAppTest(unittest.TestCase):
             (root / "app.js").write_text("app", encoding="utf-8")
             app = create_app(
                 root_dir=str(root),
-                auth_service=AuthService("secret", "signing", 60, "proxy_checker_auth"),
+                auth_service=AuthService("secret", "signing", 60, "proxy_forge_auth"),
                 deep_check=None,
                 include_repo=False,
             )

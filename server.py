@@ -1,4 +1,4 @@
-from proxy_checker.runtime_services import create_runtime_services
+from proxy_forge.runtime_services import create_runtime_services
 
 
 services = create_runtime_services()

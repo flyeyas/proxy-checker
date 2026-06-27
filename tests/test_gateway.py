@@ -3,10 +3,10 @@ import io
 import unittest
 from unittest.mock import patch
 
-from proxy_checker.gateway import tunnel
-from proxy_checker.gateway.server import make_proxy_gateway_handler, start_proxy_gateway
-from proxy_checker.gateway.upstream_pool import choose_upstream, parse_allowed_grades
-from proxy_checker.services.proxy_gateway_service import ProxyGatewayService
+from proxy_forge.gateway import tunnel
+from proxy_forge.gateway.server import make_proxy_gateway_handler, start_proxy_gateway
+from proxy_forge.gateway.upstream_pool import choose_upstream, parse_allowed_grades
+from proxy_forge.services.proxy_gateway_service import ProxyGatewayService
 
 
 class ProxyGatewayServiceTest(unittest.TestCase):
@@ -126,8 +126,8 @@ class ProxyGatewayServiceTest(unittest.TestCase):
             b"Content-Length: 5\r\n",
         ]
 
-        with patch("proxy_checker.gateway.tunnel.open_upstream", return_value=fake_socket), \
-                patch("proxy_checker.gateway.tunnel.relay") as relay_mock:
+        with patch("proxy_forge.gateway.tunnel.open_upstream", return_value=fake_socket), \
+                patch("proxy_forge.gateway.tunnel.relay") as relay_mock:
             ok = tunnel.handle_http_proxy_request(
                 client_connection,
                 io.BytesIO(b"hello"),
@@ -160,8 +160,8 @@ class ProxyGatewayServiceTest(unittest.TestCase):
         ])
         response = b"HTTP/1.1 200 Connection Established\r\n\r\n"
 
-        with patch("proxy_checker.gateway.tunnel.connect_via_upstream", return_value=(upstream_socket, response)), \
-                patch("proxy_checker.gateway.tunnel.relay") as relay_mock:
+        with patch("proxy_forge.gateway.tunnel.connect_via_upstream", return_value=(upstream_socket, response)), \
+                patch("proxy_forge.gateway.tunnel.relay") as relay_mock:
             ok = tunnel.handle_connect_tunnel(
                 client_connection,
                 writer,

@@ -1,14 +1,14 @@
 import unittest
 from types import SimpleNamespace
 
-from proxy_checker.services.fetch_service import ProxyFetchService
+from proxy_forge.services.fetch_service import ProxyFetchService
 
 
 class ProxyFetchServiceTest(unittest.TestCase):
     def test_default_module_uses_sources_package(self):
         service = ProxyFetchService()
 
-        self.assertEqual(service.module_name, "proxy_checker.sources.fetch")
+        self.assertEqual(service.module_name, "proxy_forge.sources.fetch")
         self.assertTrue(service.available)
         self.assertTrue(service.sources())
 

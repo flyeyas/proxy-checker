@@ -1,6 +1,6 @@
 import unittest
 
-from proxy_checker.services.auto_service import AutoControlService
+from proxy_forge.services.auto_service import AutoControlService
 
 
 class AutoControlServiceTest(unittest.TestCase):

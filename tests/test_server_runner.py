@@ -18,7 +18,7 @@ class ServerRunnerTest(unittest.TestCase):
         fake_waitress = type(sys)("waitress")
         fake_waitress.serve = fake_serve
 
-        from proxy_checker.http.server_runner import serve_flask_http
+        from proxy_forge.http.server_runner import serve_flask_http
 
         with patch.dict(sys.modules, {"waitress": fake_waitress}):
             serve_flask_http(lambda: app, port=8888, threads=4, logger=logger)

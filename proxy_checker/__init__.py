@@ -1,1 +1,0 @@
-"""Proxy Checker application package."""

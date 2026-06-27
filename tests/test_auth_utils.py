@@ -2,13 +2,13 @@ import unittest
 
 from flask import Flask, make_response
 
-from proxy_checker.http.auth_utils import auth_status_payload, require_auth, set_auth_cookie
-from proxy_checker.services.auth_service import AuthService
+from proxy_forge.http.auth_utils import auth_status_payload, require_auth, set_auth_cookie
+from proxy_forge.services.auth_service import AuthService
 
 
 class AuthUtilsTest(unittest.TestCase):
     def setUp(self):
-        self.auth_service = AuthService("secret", "signing", 60, "proxy_checker_auth")
+        self.auth_service = AuthService("secret", "signing", 60, "proxy_forge_auth")
         self.app = Flask(__name__)
 
         @self.app.post("/protected")
@@ -53,7 +53,7 @@ class AuthUtilsTest(unittest.TestCase):
         response = self.client.post("/cookie", json={})
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("proxy_checker_auth=token-value", response.headers["Set-Cookie"])
+        self.assertIn("proxy_forge_auth=token-value", response.headers["Set-Cookie"])
         self.assertIn("Max-Age=0", response.headers["Set-Cookie"])
         self.assertIn("HttpOnly", response.headers["Set-Cookie"])
 

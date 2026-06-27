@@ -2,8 +2,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from proxy_checker.config import PROXY_GATEWAY_GRADES, PROXY_GATEWAY_TOKEN
-from proxy_checker.gateway.runtime_gateway import RuntimeGatewayService, create_runtime_gateway_services
+from proxy_forge.config import PROXY_GATEWAY_GRADES, PROXY_GATEWAY_TOKEN
+from proxy_forge.gateway.runtime_gateway import RuntimeGatewayService, create_runtime_gateway_services
 
 
 class RuntimeGatewayServiceTest(unittest.TestCase):
@@ -18,7 +18,7 @@ class RuntimeGatewayServiceTest(unittest.TestCase):
         logger = Mock()
         service = RuntimeGatewayService(state=state, gateway_service=gateway_service, logger=logger)
 
-        with patch("proxy_checker.gateway.runtime_gateway.start_proxy_gateway") as start:
+        with patch("proxy_forge.gateway.runtime_gateway.start_proxy_gateway") as start:
             service.start()
 
         start.assert_called_once_with(

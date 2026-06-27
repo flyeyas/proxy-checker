@@ -1,7 +1,7 @@
 """
-Proxy Checker - Vercel Serverless Compatibility Entrypoint
+ProxyForge - Vercel Serverless Compatibility Entrypoint
 """
 
-from proxy_checker.serverless import AUTH_PASSWORD, app, unauthorized_response
+from proxy_forge.serverless import AUTH_PASSWORD, app, unauthorized_response
 
 __all__ = ["AUTH_PASSWORD", "app", "unauthorized_response"]

@@ -1,14 +1,14 @@
 import unittest
 from unittest.mock import patch
 
-from proxy_checker.services.deep_check_service import DeepCheckService, unavailable_payload
+from proxy_forge.services.deep_check_service import DeepCheckService, unavailable_payload
 
 
 class DeepCheckServiceTest(unittest.TestCase):
     def test_payload_returns_hint_when_nodriver_unavailable(self):
         service = DeepCheckService(nodriver_module=None)
 
-        with patch("proxy_checker.services.deep_check_service.is_nodriver_available", return_value=False):
+        with patch("proxy_forge.services.deep_check_service.is_nodriver_available", return_value=False):
             self.assertEqual(service.payload({"proxy": "http://127.0.0.1:8080"}), unavailable_payload())
 
     def test_payload_requires_proxy(self):
@@ -19,14 +19,14 @@ class DeepCheckServiceTest(unittest.TestCase):
     def test_xvfb_availability_is_exposed(self):
         service = DeepCheckService(nodriver_module=FakeNodriver("ChatGPT log in"))
 
-        with patch("proxy_checker.services.deep_check_service.is_xvfb_available", return_value=True):
+        with patch("proxy_forge.services.deep_check_service.is_xvfb_available", return_value=True):
             self.assertTrue(service.xvfb_available)
 
     def test_check_reports_real_content_without_cloudflare_challenge(self):
         fake_nodriver = FakeNodriver("ChatGPT log in")
         service = DeepCheckService(target_url="https://example.test/", nodriver_module=fake_nodriver)
 
-        with patch("proxy_checker.services.deep_check_service.asyncio.sleep", new=fake_sleep):
+        with patch("proxy_forge.services.deep_check_service.asyncio.sleep", new=fake_sleep):
             result = service.check("http://127.0.0.1:8080")
 
         self.assertEqual(result["success"], True)
@@ -39,7 +39,7 @@ class DeepCheckServiceTest(unittest.TestCase):
     def test_check_detects_cloudflare_challenge(self):
         service = DeepCheckService(nodriver_module=FakeNodriver("Just a moment Verify you are human"))
 
-        with patch("proxy_checker.services.deep_check_service.asyncio.sleep", new=fake_sleep):
+        with patch("proxy_forge.services.deep_check_service.asyncio.sleep", new=fake_sleep):
             result = service.check("http://127.0.0.1:8080")
 
         self.assertEqual(result["success"], False)

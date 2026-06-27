@@ -1,6 +1,6 @@
 import unittest
 
-from proxy_checker.services.session_cleanup_service import SessionCleanupService
+from proxy_forge.services.session_cleanup_service import SessionCleanupService
 
 
 class SessionCleanupServiceTest(unittest.TestCase):

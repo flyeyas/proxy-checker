@@ -1,12 +1,25 @@
 import unittest
-from unittest.mock import patch
 
-from proxy_checker.services.repo_service import (
+from proxy_forge.services.repo_service import (
     filter_repo_by_grades,
     merge_repo_results,
     repo_item_matches_grades,
     result_matches_policy,
 )
+
+
+class FakeRepo:
+    def write(self, data):
+        return data
+
+
+class FakeStorage:
+    def __init__(self):
+        self.repo = FakeRepo()
+
+
+def fake_storage_factory(_token):
+    return FakeStorage()
 
 
 class RepoPolicyTest(unittest.TestCase):
@@ -46,15 +59,15 @@ class RepoPolicyTest(unittest.TestCase):
             {"original": "new:1", "proxy": "new:1", "grade": "A", "valid": True},
         ]
 
-        with patch("proxy_checker.services.repo_service.write_repo_data", side_effect=lambda _token, data: data):
-            summary = merge_repo_results(
-                "token",
-                repo,
-                results,
-                ["old:1", "bad:1", "new:1"],
-                "grade_ab_only",
-                ("stable_only", "grade_ab_only"),
-            )
+        summary = merge_repo_results(
+            "token",
+            repo,
+            results,
+            ["old:1", "bad:1", "new:1"],
+            "grade_ab_only",
+            ("stable_only", "grade_ab_only"),
+            storage_factory=fake_storage_factory,
+        )
 
         self.assertEqual(summary["repo_count"], 2)
         self.assertEqual(summary["repo_added"], 1)

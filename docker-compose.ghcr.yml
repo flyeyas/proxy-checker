@@ -1,7 +1,7 @@
 services:
-  proxy-checker:
-    image: "${IMAGE:?set IMAGE, for example ghcr.io/flyeyas/proxy-checker:v0.1.1}"
-    container_name: proxy-checker
+  proxy-forge:
+    image: "${IMAGE:?set IMAGE, for example ghcr.io/flyeyas/proxy-forge:v0.1.1}"
+    container_name: proxy-forge
     restart: unless-stopped
     ports:
       - "${HOST_PORT:-8888}:8888"
@@ -26,10 +26,8 @@ services:
       APP_TIMEZONE: "${APP_TIMEZONE:-Asia/Shanghai}"
       LOG_FILE: "/app/logs/server.log"
     volumes:
-      - proxy_checker_repo:/app/repo_data
-      - proxy_checker_checked:/app/checked_data
-      - proxy_checker_auto:/app/auto_data
-      - proxy_checker_logs:/app/logs
+      - proxy_forge_data:/app/data
+      - proxy_forge_logs:/app/logs
     healthcheck:
       test:
         [
@@ -44,7 +42,5 @@ services:
       start_period: 30s
 
 volumes:
-  proxy_checker_repo:
-  proxy_checker_checked:
-  proxy_checker_auto:
-  proxy_checker_logs:
+  proxy_forge_data:
+  proxy_forge_logs:
