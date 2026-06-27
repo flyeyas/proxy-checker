@@ -22,3 +22,4 @@ fix_*.py
 *.bak2
 server.log
 codex-gpt55-auto-review.md
+CLAUDE.md
