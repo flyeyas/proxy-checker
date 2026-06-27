@@ -35,7 +35,7 @@ jobs:
         id: image
         run: |
           echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-          version="$(grep -m1 '^# Proxy Checker v' README.md | sed -E 's/^# Proxy Checker (v[0-9.]+).*$/\1/')"
+          version="$(grep -m1 '^# ProxyForge v' README.md | sed -E 's/^# ProxyForge (v[0-9.]+).*$/\1/')"
           if [ -z "$version" ]; then
             version="v0.0.0"
           fi
@@ -57,7 +57,7 @@ jobs:
             type=ref,event=tag
             type=sha,prefix=sha-
           labels: |
-            org.opencontainers.image.title=proxy-checker
+            org.opencontainers.image.title=proxy-forge
             org.opencontainers.image.description=Self-hosted proxy checker and repository maintainer
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 

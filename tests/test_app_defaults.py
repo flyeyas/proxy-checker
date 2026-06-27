@@ -1,6 +1,6 @@
 import unittest
 
-from proxy_checker.app_defaults import (
+from proxy_forge.app_defaults import (
     create_default_auto_handlers,
     create_default_check_handlers,
     create_default_deep_check_handler,

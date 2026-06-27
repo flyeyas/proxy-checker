@@ -2,8 +2,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from proxy_checker.services.check_service import ManualCheckService
-from proxy_checker.services.runtime_check_service import create_manual_check_service
+from proxy_forge.services.check_service import ManualCheckService
+from proxy_forge.services.runtime_check_service import create_manual_check_service
 
 
 class RuntimeCheckServiceFactoryTest(unittest.TestCase):

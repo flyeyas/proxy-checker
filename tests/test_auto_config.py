@@ -1,7 +1,7 @@
 import unittest
 from datetime import timezone
 
-from proxy_checker.services.auto_config_service import (
+from proxy_forge.services.auto_config_service import (
     compute_next_run,
     default_auto_config,
     default_auto_state,

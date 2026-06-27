@@ -2,11 +2,11 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from proxy_checker.services.auto_coordinator_service import AutoRunCoordinator
-from proxy_checker.services.auto_record_service import AutoRecordService
-from proxy_checker.services.auto_runtime_service import AutoRuntimeStore
-from proxy_checker.services.auto_service import AutoControlService
-from proxy_checker.services.runtime_auto_service import create_runtime_auto_services
+from proxy_forge.services.auto_coordinator_service import AutoRunCoordinator
+from proxy_forge.services.auto_record_service import AutoRecordService
+from proxy_forge.services.auto_runtime_service import AutoRuntimeStore
+from proxy_forge.services.auto_service import AutoControlService
+from proxy_forge.services.runtime_auto_service import create_runtime_auto_services
 
 
 class RuntimeAutoServiceFactoryTest(unittest.TestCase):

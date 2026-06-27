@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from proxy_checker.storage.files import atomic_write_text
-from proxy_checker.storage.paths import list_token_files, token_file_path
+from proxy_forge.storage.files import atomic_write_text
+from proxy_forge.storage.paths import list_token_files, token_file_path
 
 
 class StoragePathsTest(unittest.TestCase):
@@ -27,7 +27,7 @@ class StoragePathsTest(unittest.TestCase):
             self.assertEqual(list_token_files(directory, "json"), ["alpha", "beta"])
 
     def test_list_token_files_missing_directory_returns_empty_list(self):
-        self.assertEqual(list_token_files("/tmp/proxy-checker-missing-dir", "json"), [])
+        self.assertEqual(list_token_files("/tmp/proxy-forge-missing-dir", "json"), [])
 
     def test_atomic_write_text_creates_parent_directory(self):
         with tempfile.TemporaryDirectory() as directory:

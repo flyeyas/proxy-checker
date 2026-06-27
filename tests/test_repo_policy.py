@@ -1,6 +1,6 @@
 import unittest
 
-from proxy_checker.services.repo_service import (
+from proxy_forge.services.repo_service import (
     filter_repo_by_grades,
     merge_repo_results,
     repo_item_matches_grades,

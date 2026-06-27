@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import Mock
 
-from proxy_checker.app_dependencies import AppDependencies, resolve_app_dependencies
-from proxy_checker.services.log_service import LogService
+from proxy_forge.app_dependencies import AppDependencies, resolve_app_dependencies
+from proxy_forge.services.log_service import LogService
 
 
 class AppDependenciesTest(unittest.TestCase):

@@ -1,6 +1,6 @@
 import unittest
 
-from proxy_checker.services.repo_update_service import RepoUpdateService
+from proxy_forge.services.repo_update_service import RepoUpdateService
 
 
 class RepoUpdateServiceTest(unittest.TestCase):

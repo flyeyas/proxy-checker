@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from proxy_checker.services.runtime_settings_payload_service import RuntimeSettingsPayloadService
+from proxy_forge.services.runtime_settings_payload_service import RuntimeSettingsPayloadService
 
 
 class RuntimeSettingsPayloadServiceTest(unittest.TestCase):

@@ -1,12 +1,12 @@
-# Proxy Checker v0.1.1
+# ProxyForge v0.1.1
 
-Proxy Checker 是一个自托管优先的免费代理检测、筛选、仓库维护工具。你可以把它理解成一个给代理池做体检的小面板：拉取持续更新的公共代理源，批量检测 HTTP、HTTPS、SOCKS4、SOCKS5、SOCKS5H，把真正有用的代理放进“我的仓库”，再生成稳定的 TXT / JSON 链接给脚本、服务或其他工具直接拉取。
+ProxyForge 是一个自托管优先的免费代理检测、筛选、仓库维护工具。你可以把它理解成一个给代理池做体检的小面板：拉取持续更新的公共代理源，批量检测 HTTP、HTTPS、SOCKS4、SOCKS5、SOCKS5H，把真正有用的代理放进“我的仓库”，再生成稳定的 TXT / JSON 链接给脚本、服务或其他工具直接拉取。
 
 如果你经常折腾代理、跑号服务器、API 连通性，这个版本就很适合放在自己的机器上跑。它不是那种“我在别的机器上测通了，所以你那里也一定能用”的玄学榜单，而是直接回答一个更实用的问题：**你这台服务器能不能连上这个代理，并且通过它访问目标服务？**
 
-🚀 项目地址：[flyeyas/proxy-checker](https://github.com/flyeyas/proxy-checker)
+🚀 项目地址：[flyeyas/proxy-forge](https://github.com/flyeyas/proxy-forge)
 
-本项目 fork 自 [strongshuai/proxy-checker](https://github.com/strongshuai/proxy-checker)。
+本项目 fork 自 [strongshuai/proxy-forge](https://github.com/strongshuai/proxy-forge)。
 
 <img width="2970" height="1830" alt="image" src="https://github.com/user-attachments/assets/c970c634-bb01-490d-ae6b-b9d257048623" />
 <img width="2652" height="1563" alt="image" src="https://github.com/user-attachments/assets/84b9a523-aae2-4a4b-940e-954d52544089" />
@@ -133,8 +133,8 @@ PROXY_HOST_PORT=7890
 
 ## v0.1.0 更新内容
 
-- 从 [strongshuai/proxy-checker](https://github.com/strongshuai/proxy-checker) fork 后建立新的项目版本线。
-- 项目地址、页面 GitHub 链接、镜像地址和部署示例改为 `flyeyas/proxy-checker`。
+- 从 [strongshuai/proxy-forge](https://github.com/strongshuai/proxy-forge) fork 后建立新的项目版本线。
+- 项目地址、页面 GitHub 链接、镜像地址和部署示例改为 `flyeyas/proxy-forge`。
 - 新增 Dockerfile、Docker Compose 和 GHCR 镜像部署示例。
 - 新增 GitHub Actions 自动构建并发布 Docker 镜像。
 - Docker 镜像标签从当前项目版本线开始，默认使用 `v0.1.0`。
@@ -233,8 +233,8 @@ PROXY_HOST_PORT=7890
 ## 快速开始
 
 ```bash
-git clone https://github.com/flyeyas/proxy-checker.git
-cd proxy-checker
+git clone https://github.com/flyeyas/proxy-forge.git
+cd proxy-forge
 pip install -r requirements.txt
 python server.py
 ```
@@ -296,18 +296,18 @@ HOST_PORT=8899
 如果要修改本地构建出来的镜像名或版本号标签，修改 `.env`：
 
 ```text
-IMAGE_NAME=proxy-checker
+IMAGE_NAME=proxy-forge
 VERSION=v0.1.1
 ```
 
-本地 `docker compose up -d --build` 会生成类似 `proxy-checker:v0.1.1` 的镜像。
+本地 `docker compose up -d --build` 会生成类似 `proxy-forge:v0.1.1` 的镜像。
 
 容器内部管理服务端口固定为 `8888`，宿主机端口由 `HOST_PORT` 映射。代理网关容器端口固定为 `7890`，宿主机默认映射为 `127.0.0.1:7890`。默认持久化卷包括：
 
-- `proxy_checker_repo`：我的仓库 TXT / JSON 数据。
-- `proxy_checker_checked`：已检测历史。
-- `proxy_checker_auto`：自动任务配置和状态。
-- `proxy_checker_logs`：服务日志和运行日志。
+- `proxy_forge_repo`：我的仓库 TXT / JSON 数据。
+- `proxy_forge_checked`：已检测历史。
+- `proxy_forge_auto`：自动任务配置和状态。
+- `proxy_forge_logs`：服务日志和运行日志。
 
 ## GitHub Actions 自动打包镜像
 
@@ -327,14 +327,14 @@ ghcr.io/<你的 GitHub 用户名或组织名>/<仓库名>:v0.1.1
 例如：
 
 ```bash
-docker pull ghcr.io/flyeyas/proxy-checker:v0.1.1
+docker pull ghcr.io/flyeyas/proxy-forge:v0.1.1
 ```
 
 如果要让别人公开拉取镜像，需要到 GitHub 仓库的 `Packages` 页面，把对应 container package 的可见性改为 Public。私有镜像拉取时需要先登录：
 
 ```bash
 echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-docker pull ghcr.io/YOUR_GITHUB_USERNAME/proxy-checker:v0.1.1
+docker pull ghcr.io/YOUR_GITHUB_USERNAME/proxy-forge:v0.1.1
 ```
 
 服务器上直接使用 GHCR 镜像部署：
@@ -346,7 +346,7 @@ cp .env.example .env
 编辑 `.env`：
 
 ```text
-IMAGE=ghcr.io/YOUR_GITHUB_USERNAME/proxy-checker:v0.1.1
+IMAGE=ghcr.io/YOUR_GITHUB_USERNAME/proxy-forge:v0.1.1
 AUTH_PASSWORD=your-strong-password
 ```
 
@@ -365,7 +365,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 
 ## 部署位置很重要
 
-最好把 Proxy Checker 部署在你实际跑号、跑业务、调用目标服务的那台服务器上。
+最好把 ProxyForge 部署在你实际跑号、跑业务、调用目标服务的那台服务器上。
 
 代理检测不是一个绝对结果，而是“检测服务器 -> 代理 IP -> 目标服务”这条链路在当前时间点是否可用。其他服务器能检测出有效代理，只能说明那台服务器可以连通这个代理 IP；不代表你的服务器也一定能连通。最终要看你的服务器能不能连上代理 IP，以及这个代理从你的服务器出口访问目标服务时是否正常。
 
@@ -427,12 +427,12 @@ docker compose -f docker-compose.ghcr.yml up -d
 
 ```ini
 [Unit]
-Description=Proxy Checker
+Description=ProxyForge
 After=network.target
 
 [Service]
-WorkingDirectory=/opt/proxy-checker
-ExecStart=/usr/bin/python3 /opt/proxy-checker/server.py
+WorkingDirectory=/opt/proxy-forge
+ExecStart=/usr/bin/python3 /opt/proxy-forge/server.py
 Restart=always
 Environment=PORT=8888
 Environment=AUTH_PASSWORD=change-me
@@ -460,7 +460,7 @@ python tools/smoke.py --base-url http://localhost:8888 --password linux.do
 ## 项目结构
 
 ```text
-proxy-checker/
+proxy-forge/
 ├── index.html          # 前端页面
 ├── app.js              # 前端逻辑
 ├── server.py           # Python HTTP 服务

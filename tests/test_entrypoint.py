@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from proxy_checker.config import HTTP_THREADS
+from proxy_forge.config import HTTP_THREADS
 
 
 class EntrypointConfigTest(unittest.TestCase):
@@ -13,8 +13,8 @@ class EntrypointConfigTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         requirements = (root / "requirements.txt").read_text(encoding="utf-8")
         server = (root / "server.py").read_text(encoding="utf-8")
-        runtime_http = (root / "proxy_checker" / "http" / "runtime_http.py").read_text(encoding="utf-8")
-        runner = (root / "proxy_checker" / "http" / "server_runner.py").read_text(encoding="utf-8")
+        runtime_http = (root / "proxy_forge" / "http" / "runtime_http.py").read_text(encoding="utf-8")
+        runner = (root / "proxy_forge" / "http" / "server_runner.py").read_text(encoding="utf-8")
 
         self.assertIn("waitress", requirements)
         self.assertIn("from waitress import serve", runner)

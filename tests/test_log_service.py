@@ -1,6 +1,6 @@
 import unittest
 
-from proxy_checker.services.log_service import LogService
+from proxy_forge.services.log_service import LogService
 
 
 class FakeRuns:

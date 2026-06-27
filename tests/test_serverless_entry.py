@@ -9,7 +9,7 @@ class ServerlessEntryTest(unittest.TestCase):
     def setUpClass(cls):
         root = Path(__file__).resolve().parents[1]
         spec = importlib.util.spec_from_file_location(
-            "proxy_checker_serverless_index_test",
+            "proxy_forge_serverless_index_test",
             root / "api" / "index.py",
         )
         module = importlib.util.module_from_spec(spec)

@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from proxy_checker.services.runtime_settings_apply_service import (
+from proxy_forge.services.runtime_settings_apply_service import (
     RuntimeCheckEngineFactory,
     RuntimeSettingsApplyService,
 )

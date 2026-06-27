@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from proxy_checker.storage.tenant import LegacyStorageLayout, TenantStorage, list_tenant_tokens
+from proxy_forge.storage.tenant import LegacyStorageLayout, TenantStorage, list_tenant_tokens
 
 
 class TenantStorageTest(unittest.TestCase):
@@ -110,7 +110,7 @@ class TenantStorageTest(unittest.TestCase):
         self.assertEqual(list_tenant_tokens(self.layout), ["alpha", "beta"])
 
     def _tenant_dir_storage(self, token):
-        from proxy_checker.storage.tenant import TenantDirLayout
+        from proxy_forge.storage.tenant import TenantDirLayout
 
         data_dir = os.path.join(self.base, "data")
         return TenantStorage(token, layout=TenantDirLayout(data_dir=data_dir))
@@ -128,7 +128,7 @@ class TenantStorageTest(unittest.TestCase):
     def test_runs_migrates_legacy_json_on_first_access(self):
         import json
 
-        from proxy_checker.storage.tenant import TenantDirLayout
+        from proxy_forge.storage.tenant import TenantDirLayout
 
         data_dir = os.path.join(self.base, "data")
         layout = TenantDirLayout(data_dir=data_dir)

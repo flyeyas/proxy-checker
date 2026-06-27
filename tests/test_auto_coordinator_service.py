@@ -1,9 +1,9 @@
 import threading
 import unittest
 
-from proxy_checker.services.auto_coordinator_service import AutoRunCoordinator
-from proxy_checker.services.auto_runtime_service import AutoRuntimeStore
-from proxy_checker.services.auto_run_service import build_auto_runtime
+from proxy_forge.services.auto_coordinator_service import AutoRunCoordinator
+from proxy_forge.services.auto_runtime_service import AutoRuntimeStore
+from proxy_forge.services.auto_run_service import build_auto_runtime
 
 
 class AutoRunCoordinatorTest(unittest.TestCase):

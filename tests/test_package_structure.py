@@ -5,26 +5,26 @@ import unittest
 class PackageStructureTest(unittest.TestCase):
     def test_refactor_target_modules_are_importable(self):
         for module_name in (
-            "proxy_checker.models",
-            "proxy_checker.responses",
-            "proxy_checker.app_dependencies",
-            "proxy_checker.app_defaults",
-            "proxy_checker.runtime_services",
-            "proxy_checker.serverless",
-            "proxy_checker.http.blueprints",
-            "proxy_checker.http.cors",
-            "proxy_checker.checking",
-            "proxy_checker.checking.engine",
-            "proxy_checker.sources",
-            "proxy_checker.sources.fetch",
-            "proxy_checker.storage.paths",
+            "proxy_forge.models",
+            "proxy_forge.responses",
+            "proxy_forge.app_dependencies",
+            "proxy_forge.app_defaults",
+            "proxy_forge.runtime_services",
+            "proxy_forge.serverless",
+            "proxy_forge.http.blueprints",
+            "proxy_forge.http.cors",
+            "proxy_forge.checking",
+            "proxy_forge.checking.engine",
+            "proxy_forge.sources",
+            "proxy_forge.sources.fetch",
+            "proxy_forge.storage.paths",
         ):
             with self.subTest(module_name=module_name):
                 self.assertIsNotNone(importlib.import_module(module_name))
 
     def test_checking_and_sources_facades_export_expected_symbols(self):
-        checking = importlib.import_module("proxy_checker.checking")
-        sources = importlib.import_module("proxy_checker.sources")
+        checking = importlib.import_module("proxy_forge.checking")
+        sources = importlib.import_module("proxy_forge.sources")
 
         self.assertTrue(hasattr(checking, "ProxyCheckEngine"))
         self.assertTrue(hasattr(checking, "TARGET_PROFILE_OPTIONS"))
@@ -33,9 +33,9 @@ class PackageStructureTest(unittest.TestCase):
 
     def test_legacy_top_level_modules_delegate_to_package_implementations(self):
         legacy_checking = importlib.import_module("proxy_check")
-        checking = importlib.import_module("proxy_checker.checking.engine")
+        checking = importlib.import_module("proxy_forge.checking.engine")
         legacy_sources = importlib.import_module("fetch_proxies")
-        sources = importlib.import_module("proxy_checker.sources.fetch")
+        sources = importlib.import_module("proxy_forge.sources.fetch")
 
         self.assertIs(legacy_checking.ProxyCheckEngine, checking.ProxyCheckEngine)
         self.assertIs(legacy_checking.CheckConfig, checking.CheckConfig)

@@ -53,7 +53,7 @@ function login(){
       return;
     }
     if(result.data.token){
-      try{localStorage.setItem('proxy_checker_auth_token',result.data.token)}catch(e){}
+      try{localStorage.setItem('proxy_forge_auth_token',result.data.token)}catch(e){}
     }
     location.replace('/');
   }).catch(function(){

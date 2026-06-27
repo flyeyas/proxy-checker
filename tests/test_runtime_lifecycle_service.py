@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from proxy_checker.services.runtime_lifecycle_service import RuntimeLifecycleService
+from proxy_forge.services.runtime_lifecycle_service import RuntimeLifecycleService
 
 
 class RuntimeLifecycleServiceTest(unittest.TestCase):

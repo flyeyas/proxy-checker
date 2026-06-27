@@ -5,7 +5,7 @@ import os
 import tempfile
 import unittest
 
-from proxy_checker.migrate import v1_to_v2
+from proxy_forge.migrate import v1_to_v2
 
 
 def _write_text(path, text):

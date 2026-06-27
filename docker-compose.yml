@@ -1,11 +1,11 @@
 services:
-  proxy-checker:
-    image: "${IMAGE_NAME:-proxy-checker}:${VERSION:-v0.1.1}"
+  proxy-forge:
+    image: "${IMAGE_NAME:-proxy-forge}:${VERSION:-v0.1.1}"
     build:
       context: .
       args:
         PYTHON_IMAGE: "${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.12-slim}"
-    container_name: proxy-checker
+    container_name: proxy-forge
     restart: unless-stopped
     ports:
       - "${HOST_PORT:-8888}:8888"
@@ -30,10 +30,10 @@ services:
       APP_TIMEZONE: "${APP_TIMEZONE:-Asia/Shanghai}"
       LOG_FILE: "/app/logs/server.log"
     volumes:
-      - proxy_checker_repo:/app/repo_data
-      - proxy_checker_checked:/app/checked_data
-      - proxy_checker_auto:/app/auto_data
-      - proxy_checker_logs:/app/logs
+      - proxy_forge_repo:/app/repo_data
+      - proxy_forge_checked:/app/checked_data
+      - proxy_forge_auto:/app/auto_data
+      - proxy_forge_logs:/app/logs
     healthcheck:
       test:
         [
@@ -48,7 +48,7 @@ services:
       start_period: 30s
 
 volumes:
-  proxy_checker_repo:
-  proxy_checker_checked:
-  proxy_checker_auto:
-  proxy_checker_logs:
+  proxy_forge_repo:
+  proxy_forge_checked:
+  proxy_forge_auto:
+  proxy_forge_logs:
