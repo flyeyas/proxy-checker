@@ -471,9 +471,7 @@ proxy-forge/
 ├── tools/smoke.py      # Smoke test
 ├── PRODUCT.md          # 产品上下文
 ├── requirements.txt    # Python 依赖
-├── repo_data/          # 运行期仓库数据，已忽略
-├── checked_data/       # 运行期已检测记录，已忽略
-├── auto_data/          # 运行期自动任务配置和状态，已忽略
+├── data/               # 运行期租户数据（每 token 一个子目录），已忽略
 ├── logs/               # 运行期日志，已忽略
 └── README.md
 ```

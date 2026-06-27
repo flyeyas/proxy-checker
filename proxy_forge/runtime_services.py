@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from proxy_forge.checking.engine import DEFAULT_TARGET_CHAT
 from proxy_forge.config import LOG_FILE_PATH, Settings, ensure_runtime_dirs
 from proxy_forge.gateway.runtime_gateway import create_runtime_gateway_services
-from proxy_forge.migrate.v1_to_v2 import maybe_run_migration
 from proxy_forge.http.runtime_http import create_runtime_http_service
 from proxy_forge.services.auth_service import create_runtime_auth_service
 from proxy_forge.services.deep_check_service import DeepCheckService
@@ -72,7 +71,6 @@ def create_runtime_services():
     state = Settings.load()
     log = configure_logging(LOG_FILE_PATH)
     ensure_runtime_dirs()
-    maybe_run_migration(logger=log)
     target_chat = DEFAULT_TARGET_CHAT
     storage_factory = create_tenant_storage_factory()
     auth_service = create_runtime_auth_service(state)

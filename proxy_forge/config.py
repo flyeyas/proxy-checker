@@ -54,11 +54,6 @@ def ensure_runtime_dir(path):
 DATA_DIR = runtime_path("data")
 LOG_DIR = runtime_path("logs")
 
-LEGACY_REPO_DIR = runtime_path("repo_data")
-LEGACY_CHECKED_DIR = runtime_path("checked_data")
-LEGACY_AUTO_DIR = runtime_path("auto_data")
-LEGACY_RUNS_DIR = LOG_DIR
-
 REPO_DIR = DATA_DIR
 
 

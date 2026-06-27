@@ -13,9 +13,7 @@ app.js.bak*
 .vercel/
 node_modules/
 .vscode/
-repo_data/
-checked_data/
-auto_data/
+data/
 logs/
 patch_*.py
 fix_*.py

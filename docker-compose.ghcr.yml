@@ -26,9 +26,7 @@ services:
       APP_TIMEZONE: "${APP_TIMEZONE:-Asia/Shanghai}"
       LOG_FILE: "/app/logs/server.log"
     volumes:
-      - proxy_forge_repo:/app/repo_data
-      - proxy_forge_checked:/app/checked_data
-      - proxy_forge_auto:/app/auto_data
+      - proxy_forge_data:/app/data
       - proxy_forge_logs:/app/logs
     healthcheck:
       test:
@@ -44,7 +42,5 @@ services:
       start_period: 30s
 
 volumes:
-  proxy_forge_repo:
-  proxy_forge_checked:
-  proxy_forge_auto:
+  proxy_forge_data:
   proxy_forge_logs:

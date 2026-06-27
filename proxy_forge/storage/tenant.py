@@ -2,32 +2,17 @@
 
 A `TenantStorage` exposes the four resource backends (`repo`, `checked`,
 `auto`, `runs`) for a single token. Path resolution is delegated to a
-`StorageLayout` strategy. Two layouts are supplied:
-
-- `TenantDirLayout` — the target layout, one directory per token:
-  `data/<token>/{repo.json, repo.txt, checked.txt, auto.json, runs.json}`
-- `LegacyStorageLayout` — the pre-Phase 3 layout used only by the
-  migration tool to read the old `repo_data/`, `checked_data/`,
-  `auto_data/`, `logs/` directories.
+`StorageLayout` strategy. The supported layout is `TenantDirLayout`, one
+directory per token: `data/<token>/{repo.json, repo.txt, checked.txt,
+auto.json, runs.jsonl}`.
 """
 
 import os
 
-from proxy_forge.config import (
-    DATA_DIR,
-    LEGACY_AUTO_DIR,
-    LEGACY_CHECKED_DIR,
-    LEGACY_REPO_DIR,
-    LEGACY_RUNS_DIR,
-)
+from proxy_forge.config import DATA_DIR
 from proxy_forge.storage.auto_backend import AutoBackend
 from proxy_forge.storage.checked_backend import CheckedBackend
-from proxy_forge.storage.paths import (
-    list_tenant_dirs,
-    list_token_files,
-    tenant_dir_path,
-    token_file_path,
-)
+from proxy_forge.storage.paths import list_tenant_dirs, tenant_dir_path
 from proxy_forge.storage.repo_backend import RepoBackend
 from proxy_forge.storage.runs_backend import RunsBackend
 from proxy_forge.utils import sanitize_token
@@ -62,32 +47,6 @@ class TenantDirLayout:
 
     def list_tokens(self):
         return list_tenant_dirs(self.data_dir, AUTO_JSON_NAME)
-
-
-class LegacyStorageLayout:
-    def __init__(self, *, repo_dir=None, checked_dir=None, auto_dir=None, runs_dir=None):
-        self.repo_dir = repo_dir or LEGACY_REPO_DIR
-        self.checked_dir = checked_dir or LEGACY_CHECKED_DIR
-        self.auto_dir = auto_dir or LEGACY_AUTO_DIR
-        self.runs_dir = runs_dir or LEGACY_RUNS_DIR
-
-    def repo_paths(self, token):
-        return (
-            token_file_path(self.repo_dir, token, "json"),
-            token_file_path(self.repo_dir, token, "txt"),
-        )
-
-    def checked_path(self, token):
-        return token_file_path(self.checked_dir, token, "txt")
-
-    def auto_path(self, token):
-        return token_file_path(self.auto_dir, token, "json")
-
-    def runs_path(self, token):
-        return token_file_path(self.runs_dir, token, "json")
-
-    def list_tokens(self):
-        return list_token_files(self.auto_dir, "json")
 
 
 def default_layout():

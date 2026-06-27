@@ -9,9 +9,7 @@ venv/
 config.local.json
 *.log
 server.log
-repo_data/
-checked_data/
-auto_data/
+data/
 logs/
 outputs/
 work/

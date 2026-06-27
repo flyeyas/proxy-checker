@@ -9,7 +9,7 @@ class RuntimeHttpServiceTest(unittest.TestCase):
     def setUp(self):
         self.state = SimpleNamespace(
             base_dir="/tmp/proxy-forge",
-            repo_dir="/tmp/proxy-forge/repo_data",
+            repo_dir="/tmp/proxy-forge/data",
             port=8888,
             http_threads=16,
             app_timezone="UTC",

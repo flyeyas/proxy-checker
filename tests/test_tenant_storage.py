@@ -2,25 +2,16 @@ import os
 import tempfile
 import unittest
 
-from proxy_forge.storage.tenant import LegacyStorageLayout, TenantStorage, list_tenant_tokens
+from proxy_forge.storage.tenant import TenantDirLayout, TenantStorage, list_tenant_tokens
 
 
 class TenantStorageTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.base = self._tmp.name
-        self.repo_dir = os.path.join(self.base, "repo_data")
-        self.checked_dir = os.path.join(self.base, "checked_data")
-        self.auto_dir = os.path.join(self.base, "auto_data")
-        self.runs_dir = os.path.join(self.base, "logs")
-        for path in (self.repo_dir, self.checked_dir, self.auto_dir, self.runs_dir):
-            os.makedirs(path, exist_ok=True)
-        self.layout = LegacyStorageLayout(
-            repo_dir=self.repo_dir,
-            checked_dir=self.checked_dir,
-            auto_dir=self.auto_dir,
-            runs_dir=self.runs_dir,
-        )
+        self.data_dir = os.path.join(self.base, "data")
+        os.makedirs(self.data_dir, exist_ok=True)
+        self.layout = TenantDirLayout(data_dir=self.data_dir)
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -109,14 +100,8 @@ class TenantStorageTest(unittest.TestCase):
         b.auto.write({"config": {}, "state": {}})
         self.assertEqual(list_tenant_tokens(self.layout), ["alpha", "beta"])
 
-    def _tenant_dir_storage(self, token):
-        from proxy_forge.storage.tenant import TenantDirLayout
-
-        data_dir = os.path.join(self.base, "data")
-        return TenantStorage(token, layout=TenantDirLayout(data_dir=data_dir))
-
     def test_runs_stored_as_jsonl_one_line_per_entry(self):
-        storage = self._tenant_dir_storage("alpha")
+        storage = self._storage("alpha")
         storage.runs.insert({"id": "run_1", "type": "manual"})
         storage.runs.insert({"id": "run_2", "type": "auto"})
         path = storage.runs.path()
@@ -128,11 +113,7 @@ class TenantStorageTest(unittest.TestCase):
     def test_runs_migrates_legacy_json_on_first_access(self):
         import json
 
-        from proxy_forge.storage.tenant import TenantDirLayout
-
-        data_dir = os.path.join(self.base, "data")
-        layout = TenantDirLayout(data_dir=data_dir)
-        legacy_path = layout.runs_path("alpha")[:-1]  # runs.jsonl -> runs.json
+        legacy_path = self.layout.runs_path("alpha")[:-1]  # runs.jsonl -> runs.json
         os.makedirs(os.path.dirname(legacy_path), exist_ok=True)
         with open(legacy_path, "w", encoding="utf-8") as f:
             json.dump(
@@ -142,13 +123,13 @@ class TenantStorageTest(unittest.TestCase):
                 ],
                 f,
             )
-        storage = TenantStorage("alpha", layout=layout)
+        storage = TenantStorage("alpha", layout=self.layout)
         items = storage.runs.list()
         self.assertEqual([item["id"] for item in items], ["old_2", "old_1"])
         self.assertTrue(os.path.isfile(storage.runs.path()))
 
     def test_runs_list_caps_at_default_limit(self):
-        storage = self._tenant_dir_storage("alpha")
+        storage = self._storage("alpha")
         storage.runs.set_default_limit(20)
         for index in range(30):
             storage.runs.insert({"id": f"run_{index}", "started_at": index})
